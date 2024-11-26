@@ -66,6 +66,8 @@ export class SlackController {
   async handleEvents(@Req() req: Request, @Res() res: Response) {
     const { type, challenge, event } = req.body;
 
+    console.log(JSON.stringify(req.body, null, 4));
+
     if (type === 'url_verification') {
       return res.send({ challenge });
     }
