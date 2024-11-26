@@ -86,14 +86,14 @@ export class SlackController {
     }
 
     if (event && event.type === 'message') {
-      const { text, user: giverId, channel } = event;
+      const { text, user: giverId, channel, bot_id } = event;
 
-      if (text.includes(':burrito:')) {
+      if (text.includes(':burrito:') && !bot_id) {
         const receiverId = text.match(/<@(\w+)>/)?.[1];
         await this.burritosService.giveBurrito(giverId, receiverId);
         await this.slackService.postMessage({
           channel,
-          text: `¡<@${giverId}> le dio un burrito a <@${receiverId} 🌯`,
+          text: `¡<@${giverId}> le dio un burrito a <@${receiverId}> 🌯`,
           thread_ts: event.ts,
         });
       }
