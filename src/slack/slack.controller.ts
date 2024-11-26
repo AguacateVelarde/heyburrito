@@ -85,6 +85,20 @@ export class SlackController {
       }
     }
 
+    if (event && event.type === 'message') {
+      const { text, user: giverId, channel } = event;
+
+      if (text.includes(':burrito:')) {
+        const receiverId = text.match(/<@(\w+)>/)?.[1];
+        await this.burritosService.giveBurrito(giverId, receiverId);
+        await this.slackService.postMessage({
+          channel,
+          text: `¡<@${giverId}> le dio un burrito a <@${receiverId} 🌯`,
+          thread_ts: event.ts,
+        });
+      }
+    }
+
     res.status(200).send();
   }
 }
