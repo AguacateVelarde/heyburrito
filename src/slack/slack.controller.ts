@@ -93,7 +93,7 @@ export class SlackController {
         await this.burritosService.giveBurrito(giverId, receiverId);
         await this.slackService.postMessage({
           channel,
-          text: `¡<@${giverId}> le dio un burrito a <@${receiverId}> 🌯`,
+          text: `¡<@${giverId}> le dio un burrito a <@${receiverId}>! 🌯`,
           thread_ts: event.ts,
         });
       }
