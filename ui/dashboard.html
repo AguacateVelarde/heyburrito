@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - HeyBurrito</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+        .dashboard {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin: 0;
+        }
+        .logout-button {
+            padding: 0.5rem 1rem;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 1rem;
+            color: #34495e;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .data-table {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>HeyBurrito Admin Dashboard</h1>
+            <button class="logout-button" onclick="logout()">Logout</button>
+        </div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Burritos Given</th>
+                        <th>Burritos Received</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function fetchDashboardData() {
+            try {
+                const token = localStorage.getItem('jwt_token');
+                if (!token) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
+
+                const response = await fetch('/admin/dashboard', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/admin/login';
+                        return;
+                    }
+                    throw new Error('Failed to fetch dashboard data');
+                }
+
+                const data = await response.json();
+                updateDashboard(data);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update stats
+            const statsGrid = document.getElementById('statsGrid');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Burritos</h3>
+                    <div class="stat-value">${data.burritoStats.total}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Burritos This Month</h3>
+                    <div class="stat-value">${data.burritoStats.thisMonth}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Daily Average</h3>
+                    <div class="stat-value">${data.burritoStats.dailyAverage}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Users</h3>
+                    <div class="stat-value">${data.userStats.total}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Users</h3>
+                    <div class="stat-value">${data.userStats.active}</div>
+                </div>
+            `;
+
+            // Update leaderboard
+            const leaderboardTable = document.getElementById('leaderboardTable');
+            leaderboardTable.innerHTML = data.leaderboard
+                .map(user => `
+                    <tr>
+                        <td>${user.slackId}</td>
+                        <td>${user.burritosGiven}</td>
+                        <td>${user.burritosReceived}</td>
+                    </tr>
+                `)
+                .join('');
+        }
+
+        function logout() {
+            localStorage.removeItem('jwt_token');
+            window.location.href = '/admin/login';
+        }
+
+        // Initial load
+        fetchDashboardData();
+
+        // Refresh data every 5 minutes
+        setInterval(fetchDashboardData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

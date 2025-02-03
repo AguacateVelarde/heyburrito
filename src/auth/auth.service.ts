@@ -1,35 +1,37 @@
-import { Injectable } from '@nestjs/common';
-import * as crypto from 'crypto';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
-  /**
-   * Validate request using SLACK_SIGNING_SECRET.
-   * @param timestamp Request timestamp.
-   * @param body Body of the request in string.
-   * @param signature Signature sent by Slack.
-   */
-  validateSlackRequest(
-    timestamp: string,
-    body: string,
-    signature: string,
-  ): boolean {
-    const signingSecret = process.env.SLACK_SIGNING_SECRET;
+  constructor(
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
 
-    // Building the base string
-    const baseString = `v0:${timestamp}:${body}`;
+  async validateUser(username: string, password: string): Promise<any> {
+    const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
+    const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
-    // Calculating the signature
-    const hmac = crypto
-      .createHmac('sha256', signingSecret)
-      .update(baseString)
-      .digest('hex');
-    const calculatedSignature = `v0=${hmac}`;
+    if (!adminUsername || !adminPassword) {
+      throw new UnauthorizedException('Admin credentials not configured');
+    }
 
-    // Compare the signatures
-    return crypto.timingSafeEqual(
-      Buffer.from(calculatedSignature),
-      Buffer.from(signature),
-    );
+    if (username !== adminUsername) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (password !== adminPassword) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return { username };
+  }
+
+  async login(user: any) {
+    const payload = { username: user.username, sub: 'admin' };
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
   }
 }

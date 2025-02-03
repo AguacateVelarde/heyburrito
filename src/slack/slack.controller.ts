@@ -1,104 +1,86 @@
 import { Controller, Post, Req, Res } from '@nestjs/common';
-import { BurritosService } from '../burritos/burritos.service';
 import { Request, Response } from 'express';
+import { BurritoCommand } from './commands/burrito.command';
+import { LeaderboardCommand } from './commands/leaderboard.command';
+import { UrlVerificationHandler } from './events/url-verification.handler';
+import { ReactionHandler } from './events/reaction.handler';
+import { MessageHandler } from './events/message.handler';
+import { BurritosService } from 'src/burritos/burritos.service';
 import { SlackService } from './slack.service';
+import { I18nService } from '../i18n/i18n.service';
+import { ConfigService } from 'src/config/config.service';
 
 @Controller('slack')
 export class SlackController {
-  constructor(
-    private burritosService: BurritosService,
-    private readonly slackService: SlackService,
-  ) {}
+  private commands: any[];
+  private eventHandlers: any[];
 
-  /**
-   * This method handles Slack commands.
-   * @param req
-   * @param res
-   * @returns Schema for Slack response.
-   */
+  constructor(
+    private readonly burritoService: BurritosService,
+    private readonly slackService: SlackService,
+    private readonly i18nService: I18nService,
+    private readonly configService: ConfigService,
+  ) {
+    this.commands = [
+      new BurritoCommand(this.burritoService, this.i18nService),
+      new LeaderboardCommand(
+        this.burritoService,
+        this.i18nService,
+        this.configService,
+      ),
+    ];
+    this.eventHandlers = [
+      new UrlVerificationHandler(),
+      new ReactionHandler(
+        this.slackService,
+        this.burritoService,
+        this.i18nService,
+      ),
+      new MessageHandler(
+        this.slackService,
+        this.burritoService,
+        this.i18nService,
+      ),
+    ];
+  }
+
   @Post('commands')
   async handleCommand(@Req() req: Request, @Res() res: Response) {
     const { command, text, user_id } = req.body;
 
-    if (command === '/leaderboard') {
-      const leaderboard = await this.burritosService.getLeaderboard();
-
-      // Formatting the leaderboard for Slack
-      const formattedLeaderboard = leaderboard
-        .map(
-          (user, index) =>
-            `${index + 1}. *<@${user.slackId}>*: ${user.burritosReceived} burritos 🌯`,
-        )
-        .join('\n');
-
-      return res.json({
-        response_type: 'in_channel',
-        text: `🏆 *Leaderboard de Burritos* 🏆\n${formattedLeaderboard}`,
-      });
+    const commandHandler = this.commands.find((cmd) => cmd.canHandle(command));
+    if (!commandHandler) {
+      return res
+        .status(400)
+        .send(this.i18nService.translate('errors.unknownCommand'));
     }
 
-    if (command === '/burrito') {
-      console.log(`Comando recibido: ${text}`);
-      console.log(JSON.stringify(req.body, null, 4));
-      const [mention, ...messageParts] = text.split(' ');
-      const message = messageParts.join(' ');
-      const receiverId = mention.replace(/[<@>]/g, ''); // Extracting the user ID from the mention
-
-      try {
-        await this.burritosService.giveBurrito(user_id, receiverId, message);
-        return res.json({
-          text: `¡Burrito enviado a <@${receiverId}>! 🌯 ${message ? `\n"${message}"` : ''}`,
-          response_type: 'in_channel',
-        });
-      } catch (error) {
-        return res.json({ text: `Error: ${error.message}` });
-      }
-    }
-
-    return res.status(400).send('Comando no reconocido.');
+    await commandHandler.execute({
+      userId: user_id,
+      text,
+      command,
+      response: res,
+    });
   }
 
-  /**
-   * Maneja eventos de Slack (opcional).
-   * Endpoint: /slack/events
-   */
   @Post('events')
   async handleEvents(@Req() req: Request, @Res() res: Response) {
     const { type, challenge, event } = req.body;
 
-    console.log(JSON.stringify(req.body, null, 4));
-
-    if (type === 'url_verification') {
-      return res.send({ challenge });
+    const eventHandler = this.eventHandlers.find((handler) =>
+      handler.canHandle(type, event),
+    );
+    if (!eventHandler) {
+      return res
+        .status(400)
+        .send(this.i18nService.translate('errors.unknownEvent'));
     }
 
-    if (event && event.type === 'reaction_added') {
-      const { reaction, item, user: giverId, item_user: receiverId } = event;
-
-      if (reaction === 'burrito') {
-        await this.burritosService.giveBurrito(giverId, receiverId);
-        await this.slackService.postMessage({
-          channel: item.channel,
-          text: `¡<@${giverId}> le dio un burrito a <@${receiverId}>! 🌯`,
-          thread_ts: item.ts,
-        });
-      }
-    }
-
-    if (event && event.type === 'message') {
-      const { text, user: giverId, channel, bot_id } = event;
-
-      if (text.includes(':burrito:') && !bot_id) {
-        const receiverId = text.match(/<@(\w+)>/)?.[1];
-        await this.burritosService.giveBurrito(giverId, receiverId);
-        await this.slackService.postMessage({
-          channel,
-          text: `¡<@${giverId}> le dio un burrito a <@${receiverId}>! 🌯`,
-          thread_ts: event.ts,
-        });
-      }
-    }
-
-    res.status(200).send();
+    await eventHandler.execute({
+      type,
+      event,
+      challenge,
+      response: res,
+    });
   }
 }

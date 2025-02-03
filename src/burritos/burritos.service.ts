@@ -3,19 +3,51 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Burrito } from './schemas/burrito.schema';
 import { UsersService } from '../users/users.service';
+import { ConfigService } from '../config/config.service';
+import { I18nService } from 'src/i18n/i18n.service';
 
 @Injectable()
 export class BurritosService {
   constructor(
     @InjectModel(Burrito.name) private burritoModel: Model<Burrito>,
     private usersService: UsersService,
+    private configService: ConfigService,
+    private i18nService: I18nService,
   ) {}
 
-  async giveBurrito(giverId: string, receiverId: string, message?: string) {
+  async giveBurrito({
+    giverId,
+    receiverId,
+    message,
+  }: {
+    giverId: string;
+    receiverId: string;
+    message?: string;
+  }) {
     if (giverId === receiverId) {
       throw new UnprocessableEntityException({
-        message: 'You cannot give a burrito to yourself',
+        message: this.i18nService.translate('burrito.giveBurrito.self'),
       });
+    }
+
+    const monthlyLimit = this.configService.monthlyBurritoLimit;
+    if (monthlyLimit > 0) {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const burritosGivenThisMonth = await this.burritoModel.countDocuments({
+        giverId,
+        createdAt: { $gte: startOfMonth },
+      });
+
+      if (burritosGivenThisMonth >= monthlyLimit) {
+        throw new UnprocessableEntityException({
+          message: this.i18nService.translate('burrito.giveBurrito.limit', {
+            monthlyLimit,
+          }),
+        });
+      }
     }
 
     const burrito = await this.burritoModel.create({
@@ -32,7 +64,20 @@ export class BurritosService {
     return burrito;
   }
 
-  async getLeaderboard() {
+  async getLeaderboardStats() {
     return this.usersService.getLeaderboard();
+  }
+
+  async getLeaderboard() {
+    if (!this.configService.isLeaderboardEnabled) {
+      throw new UnprocessableEntityException({
+        message: this.i18nService.translate('burritos.getLeaderboard.disabled'),
+      });
+    }
+    return this.usersService.getLeaderboard();
+  }
+
+  async getAllTransactions() {
+    return this.burritoModel.find().sort({ createdAt: -1 }).exec();
   }
 }

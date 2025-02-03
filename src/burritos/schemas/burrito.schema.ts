@@ -11,6 +11,9 @@ export class Burrito extends Document {
 
   @Prop()
   message: string;
+
+  @Prop()
+  createdAt: Date;
 }
 
 export const BurritoSchema = SchemaFactory.createForClass(Burrito);
