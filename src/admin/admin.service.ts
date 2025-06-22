@@ -20,7 +20,7 @@ export class AdminService {
     return {
       total: totalBurritos,
       thisMonth: thisMonth.length,
-      dailyAverage: Math.round(totalBurritos / 30), // Simplified average
+      dailyAverage: Math.round(totalBurritos / 30),
     };
   }
 

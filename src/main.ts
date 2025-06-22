@@ -27,7 +27,6 @@ async function bootstrap() {
     next();
   });
 
-  // Serve static files from the admin UI directory
   app.useStaticAssets(path.join(__dirname, '..', 'ui'));
 
   await app.listen(3000);
