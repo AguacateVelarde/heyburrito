@@ -26,9 +26,12 @@ export class ReactionHandler implements SlackEventHandler {
 
   async execute(context: SlackEventContext): Promise<void> {
     const { user: giverId, item } = context.event;
-    const { text } = await this.slackService.getMessage(item.channel, item.ts);
+    const { text, user: messageAuthorId } = await this.slackService.getMessage(
+      item.channel,
+      item.ts,
+    );
 
-    const receiverId = text.match(/<@(\w+)>/)?.[1];
+    const receiverId = text.match(/<@(\w+)>/)?.[1] ?? messageAuthorId;
 
     try {
       await this.burritosService.giveBurrito({ giverId, receiverId });
