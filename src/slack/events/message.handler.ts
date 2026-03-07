@@ -8,6 +8,8 @@ import { SlackService } from '../slack.service';
 import { BurritosService } from '../../burritos/burritos.service';
 import { I18nService } from '../../i18n/i18n.service';
 
+export const SYSTEM_USER_ID = 'SYSTEM';
+
 @Injectable()
 export class MessageHandler implements SlackEventHandler {
   constructor(
@@ -53,6 +55,22 @@ export class MessageHandler implements SlackEventHandler {
           text: this.i18nService.translate('burrito.givenInChannel', {
             giverId,
             receiverId,
+          }),
+          thread_ts: ts,
+        });
+      } catch (error) {
+        await this.handlerError(`${error.message} <@${giverId}>`, channel, ts);
+      }
+    } else {
+      try {
+        await this.burritosService.giveBurrito({
+          giverId: SYSTEM_USER_ID,
+          receiverId: giverId,
+        });
+        await this.slackService.postMessage({
+          channel,
+          text: this.i18nService.translate('burrito.selfGiven', {
+            receiverId: giverId,
           }),
           thread_ts: ts,
         });
