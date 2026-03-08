@@ -7,6 +7,8 @@ export const en = {
       '<@{giverId}> gave a burrito to <@{receiverId}> in this channel! 🌯',
     selfGiven:
       'No one was mentioned, so <@{receiverId}> gets a burrito! 🌯',
+    givenMultiple:
+      '<@{giverId}> gave burritos to {receivers}! 🌯 ({count} burritos)',
     error: 'Error: {message}',
     giveBurrito: {
       self: 'You cannot give a burrito to yourself!',

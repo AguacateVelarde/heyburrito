@@ -144,6 +144,97 @@ describe('MessageHandler', () => {
       );
     });
 
+    it('should give burritos to all mentioned users and post givenMultiple', async () => {
+      const response = makeResponse();
+      const context = {
+        event: {
+          text: 'great work <@U001> and <@U002> :burrito:',
+          user: 'U123',
+          channel: 'C001',
+          ts: '12345',
+        },
+        response,
+      };
+
+      mockBurritosService.giveBurrito.mockResolvedValue({});
+      mockSlackService.postMessage.mockResolvedValue({});
+
+      await handler.execute(context as any);
+
+      expect(mockBurritosService.giveBurrito).toHaveBeenCalledTimes(2);
+      expect(mockBurritosService.giveBurrito).toHaveBeenCalledWith({
+        giverId: 'U123',
+        receiverId: 'U001',
+      });
+      expect(mockBurritosService.giveBurrito).toHaveBeenCalledWith({
+        giverId: 'U123',
+        receiverId: 'U002',
+      });
+      expect(mockI18nService.translate).toHaveBeenCalledWith(
+        'burrito.givenMultiple',
+        expect.objectContaining({ giverId: 'U123', count: 2 }),
+      );
+      expect(response.status).toHaveBeenCalledWith(200);
+    });
+
+    it('should deduplicate mentions and give only one burrito per user', async () => {
+      const response = makeResponse();
+      const context = {
+        event: {
+          text: '<@U001> :burrito: <@U001>',
+          user: 'U123',
+          channel: 'C001',
+          ts: '12345',
+        },
+        response,
+      };
+
+      mockBurritosService.giveBurrito.mockResolvedValue({});
+      mockSlackService.postMessage.mockResolvedValue({});
+
+      await handler.execute(context as any);
+
+      expect(mockBurritosService.giveBurrito).toHaveBeenCalledTimes(1);
+      expect(mockBurritosService.giveBurrito).toHaveBeenCalledWith({
+        giverId: 'U123',
+        receiverId: 'U001',
+      });
+      expect(mockI18nService.translate).toHaveBeenCalledWith(
+        'burrito.givenInChannel',
+        { giverId: 'U123', receiverId: 'U001' },
+      );
+    });
+
+    it('should post errors for failed recipients but still give burritos to successful ones', async () => {
+      const response = makeResponse();
+      const context = {
+        event: {
+          text: '<@U001> <@U002> :burrito:',
+          user: 'U123',
+          channel: 'C001',
+          ts: '12345',
+        },
+        response,
+      };
+
+      mockBurritosService.giveBurrito
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce({ message: 'Monthly limit reached' });
+      mockSlackService.postMessage.mockResolvedValue({});
+
+      await handler.execute(context as any);
+
+      expect(mockSlackService.postMessage).toHaveBeenCalledTimes(2);
+      // One error message for the failed recipient
+      expect(mockSlackService.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ isError: true }),
+      );
+      // One success message for the successful recipient (no isError)
+      expect(mockSlackService.postMessage).toHaveBeenCalledWith(
+        expect.not.objectContaining({ isError: true }),
+      );
+    });
+
     it('should post error message if giveBurrito throws when no mention', async () => {
       const response = makeResponse();
       const context = {
