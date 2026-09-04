@@ -9,6 +9,8 @@
   <li><strong>Track Statistics:</strong> The bot tracks how many burritos each user has given and received.</li>
   <li><strong>Leaderboard:</strong> See who’s leading in receiving burritos.</li>
   <li><strong>Interactive Messages:</strong> Respond in threads when burritos are given to acknowledge the gesture.</li>
+  <li><strong>Birthdays:</strong> Register the team's birthdays and let the bot greet whoever is celebrating in a group channel, @-mentioning them. See the <a href="./README-Birthdays.md">birthdays guide</a>.</li>
+  <li><strong>Admin Dashboard:</strong> Web panel at <code>/admin/ui</code> with activity stats, ranking, transaction history and birthday management. See the <a href="./README-Dashboard.md">dashboard guide</a>.</li>
 </ul>
 
 <hr />
@@ -118,6 +120,10 @@ PORT=3000</code></pre>
   </li>
   <li><strong>Check the Leaderboard:</strong>
     <p>Run <code>/leaderboard</code> to see the top burrito recipients.</p>
+  </li>
+  <li><strong>Register a Birthday:</strong>
+    <p>Run <code>/cumpleanos set 05/03</code> and then <code>/cumpleanos next</code> to see the upcoming birthdays.</p>
+    <p>Set <code>BIRTHDAY_CHANNEL</code> so the bot posts the daily greeting to your team channel.</p>
   </li>
 </ol>
 

@@ -1,13 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HeyBurrito Admin Dashboard</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <title>HeyBurrito</title>
+    <meta http-equiv="refresh" content="0; url=/admin/login" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/app.js"></script>
+    <p>Redirigiendo al <a href="/admin/login">panel de administración</a>…</p>
+    <script>
+      // Skip the login screen when there is already a session.
+      try {
+        window.location.replace(
+          localStorage.getItem('jwt_token') ? '/admin/ui' : '/admin/login',
+        );
+      } catch {
+        window.location.replace('/admin/login');
+      }
+    </script>
   </body>
 </html>

@@ -17,7 +17,9 @@ const mockI18nService = {
   translate: jest.fn((key: string) => key),
 };
 
-function makeContext(overrides: Partial<{ text: string; messageAuthor: string }> = {}) {
+function makeContext(
+  overrides: Partial<{ text: string; messageAuthor: string }> = {},
+) {
   const response: any = {};
   response.status = jest.fn().mockReturnValue(response);
   response.send = jest.fn().mockReturnValue(response);
@@ -54,26 +56,38 @@ describe('ReactionHandler', () => {
   describe('canHandle', () => {
     it('should return true for reaction_added with burrito emoji', () => {
       expect(
-        handler.canHandle('event_callback', { type: 'reaction_added', reaction: 'burrito' }),
+        handler.canHandle('event_callback', {
+          type: 'reaction_added',
+          reaction: 'burrito',
+        }),
       ).toBe(true);
     });
 
     it('should return false for other emojis', () => {
       expect(
-        handler.canHandle('event_callback', { type: 'reaction_added', reaction: 'thumbsup' }),
+        handler.canHandle('event_callback', {
+          type: 'reaction_added',
+          reaction: 'thumbsup',
+        }),
       ).toBe(false);
     });
 
     it('should return false for non event_callback types', () => {
       expect(
-        handler.canHandle('slash_command', { type: 'reaction_added', reaction: 'burrito' }),
+        handler.canHandle('slash_command', {
+          type: 'reaction_added',
+          reaction: 'burrito',
+        }),
       ).toBe(false);
     });
   });
 
   describe('execute', () => {
     it('should give burrito to the user mentioned in the reacted message', async () => {
-      const context = makeContext({ text: 'great work <@U_MENTIONED>!', messageAuthor: 'U_AUTHOR' });
+      const context = makeContext({
+        text: 'great work <@U_MENTIONED>!',
+        messageAuthor: 'U_AUTHOR',
+      });
       mockBurritosService.giveBurrito.mockResolvedValue({});
       mockSlackService.postMessage.mockResolvedValue({});
 
@@ -86,7 +100,10 @@ describe('ReactionHandler', () => {
     });
 
     it('should give burrito to the message author when there is no @mention', async () => {
-      const context = makeContext({ text: 'I did something great!', messageAuthor: 'U_AUTHOR' });
+      const context = makeContext({
+        text: 'I did something great!',
+        messageAuthor: 'U_AUTHOR',
+      });
       mockBurritosService.giveBurrito.mockResolvedValue({});
       mockSlackService.postMessage.mockResolvedValue({});
 
@@ -100,7 +117,9 @@ describe('ReactionHandler', () => {
 
     it('should post error message if giveBurrito throws', async () => {
       const context = makeContext({ text: '<@U_MENTIONED>' });
-      mockBurritosService.giveBurrito.mockRejectedValue({ message: 'monthly limit reached' });
+      mockBurritosService.giveBurrito.mockRejectedValue({
+        message: 'monthly limit reached',
+      });
       mockSlackService.postMessage.mockResolvedValue({});
 
       await handler.execute(context as any);

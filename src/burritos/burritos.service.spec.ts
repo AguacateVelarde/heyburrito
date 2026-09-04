@@ -11,6 +11,7 @@ const mockBurritoModel = {
   create: jest.fn(),
   countDocuments: jest.fn(),
   find: jest.fn(),
+  aggregate: jest.fn(),
 };
 
 const mockUsersService = {
@@ -125,6 +126,40 @@ describe('BurritosService', () => {
       });
 
       expect(result).toBe(mockBurrito);
+    });
+  });
+
+  describe('getDailyCounts', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('returns one entry per day and fills the gaps with zeros', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-10T15:00:00Z'));
+      mockBurritoModel.aggregate.mockResolvedValue([
+        { _id: '2026-03-08', count: 4 },
+        { _id: '2026-03-10', count: 2 },
+      ]);
+
+      const result = await service.getDailyCounts(5);
+
+      expect(result).toEqual([
+        { date: '2026-03-06', count: 0 },
+        { date: '2026-03-07', count: 0 },
+        { date: '2026-03-08', count: 4 },
+        { date: '2026-03-09', count: 0 },
+        { date: '2026-03-10', count: 2 },
+      ]);
+    });
+
+    it('only aggregates from the start of the window', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-10T15:00:00Z'));
+      mockBurritoModel.aggregate.mockResolvedValue([]);
+
+      await service.getDailyCounts(30);
+
+      const [[stage]] = mockBurritoModel.aggregate.mock.calls;
+      expect(stage[0].$match.createdAt.$gte.toISOString()).toBe(
+        '2026-02-09T00:00:00.000Z',
+      );
     });
   });
 

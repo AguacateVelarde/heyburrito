@@ -114,9 +114,12 @@ describe('MessageHandler', () => {
         giverId: SYSTEM_USER_ID,
         receiverId: 'U123',
       });
-      expect(mockI18nService.translate).toHaveBeenCalledWith('burrito.selfGiven', {
-        receiverId: 'U123',
-      });
+      expect(mockI18nService.translate).toHaveBeenCalledWith(
+        'burrito.selfGiven',
+        {
+          receiverId: 'U123',
+        },
+      );
       expect(response.status).toHaveBeenCalledWith(200);
     });
 

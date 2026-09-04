@@ -1,128 +1,284 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - HeyBurrito</title>
+<!doctype html>
+<html lang="es" data-theme="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Acceso · HeyBurrito Admin</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: #f5f5f5;
+      :root {
+        color-scheme: light;
+        --bg: #f4f5f7;
+        --surface: #ffffff;
+        --border: #e3e6ea;
+        --border-strong: #d3d8de;
+        --text: #161d26;
+        --text-muted: #667085;
+        --text-faint: #98a2b3;
+        --accent: #ff6b35;
+        --accent-hover: #ef5a22;
+        --accent-ink: #ffffff;
+        --accent-soft: rgba(255, 107, 53, 0.12);
+        --danger: #cf2f22;
+        --danger-soft: rgba(207, 47, 34, 0.1);
+        --shadow: 0 1px 3px rgba(16, 24, 40, 0.1),
+          0 12px 32px rgba(16, 24, 40, 0.08);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          color-scheme: dark;
+          --bg: #0e1116;
+          --surface: #161b22;
+          --border: #262d38;
+          --border-strong: #333c49;
+          --text: #e7ecf3;
+          --text-muted: #98a2b3;
+          --text-faint: #6b7684;
+          --accent: #ff7c4d;
+          --accent-hover: #ff9169;
+          --accent-ink: #1a1005;
+          --accent-soft: rgba(255, 124, 77, 0.16);
+          --danger: #f2776b;
+          --danger-soft: rgba(242, 119, 107, 0.16);
+          --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
         }
-        .login-container {
-            background: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 400px;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        .login-header h1 {
-            color: #2c3e50;
-            margin: 0;
-            font-size: 1.8rem;
-        }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #34495e;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-        }
-        .login-button {
-            width: 100%;
-            padding: 0.75rem;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-        .login-button:hover {
-            background: #2980b9;
-        }
-        .error-message {
-            color: #e74c3c;
-            text-align: center;
-            margin-top: 1rem;
-            display: none;
-        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 380px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 1.75rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .brand__mark {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        background: var(--accent-soft);
+        font-size: 1.2rem;
+      }
+
+      .brand__name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .brand__sub {
+        color: var(--text-faint);
+        font-size: 0.8125rem;
+      }
+
+      .field {
+        display: grid;
+        gap: 0.35rem;
+        margin-bottom: 1rem;
+      }
+
+      .field__label {
+        font-size: 0.8125rem;
+        font-weight: 550;
+        color: var(--text-muted);
+      }
+
+      input {
+        width: 100%;
+        padding: 0.6rem 0.75rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+      }
+
+      input:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      .submit {
+        width: 100%;
+        margin-top: 0.5rem;
+        padding: 0.65rem 1rem;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          opacity 0.15s;
+      }
+
+      .submit:hover:not(:disabled) {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+
+      .submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .error {
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding: 0.6rem 0.75rem;
+        border-radius: 8px;
+        background: var(--danger-soft);
+        color: var(--danger);
+        font-weight: 500;
+      }
+
+      .error[data-visible='true'] {
+        display: flex;
+      }
     </style>
-</head>
-<body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>HeyBurrito Admin</h1>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">🌯</span>
+        <div>
+          <div class="brand__name">HeyBurrito</div>
+          <div class="brand__sub">Panel de administración</div>
         </div>
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="login-button">Login</button>
-            <div id="errorMessage" class="error-message"></div>
-        </form>
-    </div>
+      </div>
 
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const errorMessage = document.getElementById('errorMessage');
+      <form id="loginForm" novalidate>
+        <label class="field">
+          <span class="field__label">Usuario</span>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            autocomplete="username"
+            autocapitalize="none"
+            autofocus
+            required
+          />
+        </label>
 
-            try {
-                const response = await fetch('/admin/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password })
-                });
+        <label class="field">
+          <span class="field__label">Contraseña</span>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
 
-                if (!response.ok) {
-                    throw new Error('Invalid credentials');
-                }
+        <button type="submit" class="submit" id="submitButton">Entrar</button>
+        <div class="error" id="errorMessage" role="alert">
+          <span aria-hidden="true">⚠</span>
+          <span id="errorText"></span>
+        </div>
+      </form>
+    </main>
 
-                const data = await response.json();
-                localStorage.setItem('jwt_token', data.access_token);
-                window.location.href = '/admin/ui';
-            } catch (error) {
-                errorMessage.textContent = error.message;
-                errorMessage.style.display = 'block';
-            }
-        });
+    <script type="module">
+      const form = document.getElementById('loginForm');
+      const submitButton = document.getElementById('submitButton');
+      const errorBox = document.getElementById('errorMessage');
+      const errorText = document.getElementById('errorText');
+
+      // A stale token would only fail on the first API call; check it up front.
+      try {
+        if (localStorage.getItem('jwt_token')) {
+          window.location.replace('/admin/ui');
+        }
+      } catch {
+        /* storage may be blocked; the form still works */
+      }
+
+      function showError(message) {
+        errorText.textContent = message;
+        errorBox.dataset.visible = 'true';
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorBox.dataset.visible = 'false';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        if (!username || !password) {
+          showError('Escribe usuario y contraseña.');
+          return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Entrando…';
+
+        try {
+          const response = await fetch('/admin/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+
+          if (response.status === 401) {
+            throw new Error('Usuario o contraseña incorrectos.');
+          }
+          if (!response.ok) {
+            throw new Error('No se pudo iniciar sesión. Inténtalo de nuevo.');
+          }
+
+          const data = await response.json();
+          if (!data.access_token) {
+            throw new Error('Respuesta inesperada del servidor.');
+          }
+
+          localStorage.setItem('jwt_token', data.access_token);
+          window.location.href = '/admin/ui';
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Entrar';
+        }
+      });
     </script>
-</body>
+  </body>
 </html>
