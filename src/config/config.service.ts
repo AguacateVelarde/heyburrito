@@ -29,4 +29,24 @@ export class ConfigService {
   get defaultLanguage(): string {
     return this.configService.get('DEFAULT_LANGUAGE', 'en');
   }
+
+  get areBirthdaysEnabled(): boolean {
+    return this.configService.get('ENABLE_BIRTHDAYS', true);
+  }
+
+  /** Channel the daily birthday greeting is posted to. */
+  get birthdayChannel(): string {
+    return (
+      this.configService.get('BIRTHDAY_CHANNEL', '') || this.slackDefaultChannel
+    );
+  }
+
+  /** Cron expression for the daily birthday check. Defaults to 9:00 every day. */
+  get birthdayCron(): string {
+    return this.configService.get('BIRTHDAY_CRON', '0 9 * * *');
+  }
+
+  get birthdayTimezone(): string {
+    return this.configService.get('BIRTHDAY_TIMEZONE', 'UTC');
+  }
 }

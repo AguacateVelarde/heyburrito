@@ -10,4 +10,8 @@ export const validationSchema = Joi.object({
   SLACK_SIGNING_SECRET: Joi.string().required(),
   APP_PORT: Joi.number().default(3000),
   GIPHY_API_KEY: Joi.string().required(),
+  ENABLE_BIRTHDAYS: Joi.boolean().default(true),
+  BIRTHDAY_CHANNEL: Joi.string().allow('').default(''),
+  BIRTHDAY_CRON: Joi.string().default('0 9 * * *'),
+  BIRTHDAY_TIMEZONE: Joi.string().default('UTC'),
 });

@@ -4,6 +4,8 @@ export interface SlackCommandContext {
   userId: string;
   text: string;
   command: string;
+  /** Channel the slash command was invoked from. */
+  channelId?: string;
   response: Response;
 }
 

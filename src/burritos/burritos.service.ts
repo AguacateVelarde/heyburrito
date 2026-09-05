@@ -80,4 +80,65 @@ export class BurritosService {
   async getAllTransactions() {
     return this.burritoModel.find().sort({ createdAt: -1 }).exec();
   }
+
+  /** Newest transactions first, with the total so the UI can paginate. */
+  async getTransactionsPage({ limit = 50, skip = 0 } = {}) {
+    const [items, total] = await Promise.all([
+      this.burritoModel
+        .find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.burritoModel.countDocuments().exec(),
+    ]);
+
+    return { items, total, limit, skip };
+  }
+
+  async countAll(): Promise<number> {
+    return this.burritoModel.countDocuments().exec();
+  }
+
+  async countSince(date: Date): Promise<number> {
+    return this.burritoModel
+      .countDocuments({ createdAt: { $gte: date } })
+      .exec();
+  }
+
+  /**
+   * Burritos given per day over the last `days` days (UTC), including the days
+   * with no activity so the chart keeps an even x axis.
+   */
+  async getDailyCounts(days = 30): Promise<{ date: string; count: number }[]> {
+    const start = startOfUtcDay(new Date());
+    start.setUTCDate(start.getUTCDate() - (days - 1));
+
+    const rows = await this.burritoModel.aggregate([
+      { $match: { createdAt: { $gte: start } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const counts = new Map(rows.map((row) => [row._id, row.count]));
+
+    return Array.from({ length: days }, (_, index) => {
+      const day = new Date(start);
+      day.setUTCDate(day.getUTCDate() + index);
+      const date = day.toISOString().slice(0, 10);
+      return { date, count: counts.get(date) ?? 0 };
+    });
+  }
+}
+
+function startOfUtcDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setUTCHours(0, 0, 0, 0);
+  return copy;
 }

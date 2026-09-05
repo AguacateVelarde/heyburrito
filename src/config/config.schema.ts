@@ -1,4 +1,10 @@
-import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class BurritoConfigSchema {
@@ -30,4 +36,21 @@ export class BurritoConfigSchema {
 
   @IsOptional()
   DEFAULT_LANGUAGE?: string = 'en';
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value !== 'false')
+  ENABLE_BIRTHDAYS?: boolean = true;
+
+  @IsString()
+  @IsOptional()
+  BIRTHDAY_CHANNEL?: string = '';
+
+  @IsString()
+  @IsOptional()
+  BIRTHDAY_CRON?: string = '0 9 * * *';
+
+  @IsString()
+  @IsOptional()
+  BIRTHDAY_TIMEZONE?: string = 'UTC';
 }

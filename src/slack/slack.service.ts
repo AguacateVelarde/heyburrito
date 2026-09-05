@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { WebClient } from '@slack/web-api';
 import axios from 'axios';
 
+const FALLBACK_GIF_URL =
+  'https://media3.giphy.com/media/lfI3HytbkYq1q/giphy.gif?cid=fd33a07fcvt6eojpvvifokwhj2pplp6q7rqlsbyrdsnwwvaw&ep=v1_gifs_search&rid=giphy.gif&ct=g';
+
 @Injectable()
 export class SlackService {
   private client: WebClient;
@@ -29,10 +32,11 @@ export class SlackService {
     return result.user;
   }
 
-  async getGif(isError: boolean): Promise<string> {
+  /** Random Giphy result for `query`, falling back to a burrito gif. */
+  async searchGif(query: string): Promise<string> {
     const giphyApiKey = process.env.GIPHY_API_KEY;
     const response = await axios.get(
-      `https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=${isError ? 'sad-people' : 'burrito'}&limit=25&offset=0&rating=g&lang=en&bundle=messaging_non_clips`,
+      `https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=${encodeURIComponent(query)}&limit=25&offset=0&rating=g&lang=en&bundle=messaging_non_clips`,
     );
 
     const gifs = response.data.data;
@@ -41,7 +45,11 @@ export class SlackService {
       return randomGif.images.original.url;
     }
 
-    return 'https://media3.giphy.com/media/lfI3HytbkYq1q/giphy.gif?cid=fd33a07fcvt6eojpvvifokwhj2pplp6q7rqlsbyrdsnwwvaw&ep=v1_gifs_search&rid=giphy.gif&ct=g';
+    return FALLBACK_GIF_URL;
+  }
+
+  async getGif(isError: boolean): Promise<string> {
+    return this.searchGif(isError ? 'sad-people' : 'burrito');
   }
 
   async postMessage({
@@ -49,13 +57,20 @@ export class SlackService {
     text,
     thread_ts,
     isError = false,
+    gifQuery,
+    imageTitle = '¡Burrito! 🌯',
   }: {
     channel: string;
     text: string;
     thread_ts?: string;
     isError?: boolean;
+    /** Overrides the default burrito/sad-people Giphy search. */
+    gifQuery?: string;
+    imageTitle?: string;
   }) {
-    const burritoGif = await this.getGif(isError);
+    const gif = gifQuery
+      ? await this.searchGif(gifQuery)
+      : await this.getGif(isError);
     return this.client.chat.postMessage({
       channel,
       text,
@@ -72,11 +87,11 @@ export class SlackService {
           type: 'image',
           title: {
             type: 'plain_text',
-            text: `¡Burrito! 🌯`,
+            text: imageTitle,
           },
           block_id: 'image4',
-          image_url: burritoGif,
-          alt_text: 'Photo of a burrito',
+          image_url: gif,
+          alt_text: imageTitle,
         },
       ],
     });
