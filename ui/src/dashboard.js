@@ -807,6 +807,22 @@ function daysInMonthUi(month, year) {
   return [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
 }
 
+const longDateFormat = new Intl.DateTimeFormat('es', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
+
+/** The date the bot treats as "today", which is not the reader's clock. */
+function todayLine(status) {
+  if (!status.today) return null;
+  const date = longDateFormat.format(new Date(`${status.today}T12:00:00Z`));
+  return el('div', {
+    className: 'stat__hint',
+    text: `Para el bot, hoy es ${date} (${status.timezone}).`,
+  });
+}
+
 /** Explains, in one line, whether the daily greeting will actually go out. */
 function birthdayStatusBanner(status) {
   if (status.scheduled) {
@@ -823,6 +839,7 @@ function birthdayStatusBanner(status) {
               text: `Próxima ejecución: ${formatDateTime(status.nextRun)} (${formatRelative(status.nextRun)}).`,
             })
           : null,
+        todayLine(status),
       ]),
     ]);
   }
@@ -841,6 +858,10 @@ function birthdayStatusBanner(status) {
       title: 'El saludo automático NO se está enviando.',
       detail: `La expresión BIRTHDAY_CRON ("${status.cron}") no es válida.`,
     },
+    'invalid-timezone': {
+      title: 'El saludo automático NO se está enviando.',
+      detail: `BIRTHDAY_TIMEZONE ("${status.timezone}") no es una zona horaria IANA válida. Usa por ejemplo America/Mexico_City.`,
+    },
   };
 
   const problem = problems[status.problem] ?? {
@@ -853,6 +874,7 @@ function birthdayStatusBanner(status) {
     el('span', {}, [
       el('strong', { text: `${problem.title} ` }),
       el('span', { text: problem.detail }),
+      todayLine(status),
     ]),
   ]);
 }

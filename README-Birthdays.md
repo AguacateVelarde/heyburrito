@@ -74,6 +74,7 @@ the same information:
 | `no-channel` | Neither `BIRTHDAY_CHANNEL` nor `SLACK_DEFAULT_CHANNEL` is set | Set one, invite the bot to the channel, restart |
 | `disabled` | `ENABLE_BIRTHDAYS=false` | Set it to `true` and restart |
 | `invalid-cron` | `BIRTHDAY_CRON` is not a valid expression | Fix the expression and restart |
+| `invalid-timezone` | `BIRTHDAY_TIMEZONE` is not an IANA zone | Use something like `America/Mexico_City` and restart |
 
 **The cron only fires once a day.** A birthday added after that hour would
 otherwise wait until next year, so:
@@ -85,6 +86,24 @@ otherwise wait until next year, so:
 
 All three post the same grouped message and mark the greeting as sent, so the
 cron will not repeat it.
+
+## Timezone
+
+**Every date comparison uses `BIRTHDAY_TIMEZONE`, never the server clock.**
+
+A birthday is a civil date: "5 de marzo" is the same day everywhere, so asking
+`new Date().getDate()` on the server is the wrong question. A container running
+in UTC — the default for Docker and most hosts — is already on the next day while
+the team it greets is still on the previous one, so from 18:00 in `UTC-6` onward
+a birthday registered for "today" would silently stop matching.
+
+`BirthdaysService.today()` resolves the current civil date in the configured
+timezone and everything else (matching, countdowns, ages, the greeted-this-year
+stamp) is anchored to it. The dashboard states which day that is —
+*"Para el bot, hoy es viernes, 4 de septiembre (America/Mexico_City)"* — so the
+two clocks can never quietly disagree again.
+
+Set `BIRTHDAY_TIMEZONE` to your team's timezone. It defaults to `UTC`.
 
 ## Details worth knowing
 

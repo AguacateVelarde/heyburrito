@@ -1,10 +1,12 @@
 import {
   ageOnBirthday,
+  civilDateIn,
   daysInMonth,
   daysUntilBirthday,
   formatDayMonth,
   isCelebratedOn,
   isLeapYear,
+  isValidTimeZone,
   observedDate,
   parseBirthdayInput,
 } from './birthday-date.util';
@@ -79,60 +81,133 @@ describe('birthday-date.util', () => {
 
   describe('isCelebratedOn', () => {
     it('matches the exact day', () => {
-      expect(isCelebratedOn({ day: 5, month: 3 }, new Date(2025, 2, 5))).toBe(
-        true,
-      );
+      expect(
+        isCelebratedOn({ day: 5, month: 3 }, { year: 2025, month: 3, day: 5 }),
+      ).toBe(true);
     });
 
     it('celebrates a Feb 29th birthday on Feb 28th of a non-leap year', () => {
-      expect(isCelebratedOn({ day: 29, month: 2 }, new Date(2025, 1, 28))).toBe(
-        true,
-      );
+      expect(
+        isCelebratedOn(
+          { day: 29, month: 2 },
+          { year: 2025, month: 2, day: 28 },
+        ),
+      ).toBe(true);
     });
 
     it('does not celebrate a Feb 29th birthday on Feb 28th of a leap year', () => {
-      expect(isCelebratedOn({ day: 29, month: 2 }, new Date(2024, 1, 28))).toBe(
-        false,
-      );
+      expect(
+        isCelebratedOn(
+          { day: 29, month: 2 },
+          { year: 2024, month: 2, day: 28 },
+        ),
+      ).toBe(false);
     });
   });
 
   describe('daysUntilBirthday', () => {
     it('returns 0 on the birthday itself', () => {
       expect(
-        daysUntilBirthday({ day: 5, month: 3 }, new Date(2025, 2, 5)),
+        daysUntilBirthday(
+          { day: 5, month: 3 },
+          { year: 2025, month: 3, day: 5 },
+        ),
       ).toBe(0);
     });
 
     it('counts the days left within the same year', () => {
       expect(
-        daysUntilBirthday({ day: 15, month: 3 }, new Date(2025, 2, 5)),
+        daysUntilBirthday(
+          { day: 15, month: 3 },
+          { year: 2025, month: 3, day: 5 },
+        ),
       ).toBe(10);
     });
 
     it('rolls over to next year once the date has passed', () => {
       expect(
-        daysUntilBirthday({ day: 1, month: 1 }, new Date(2025, 11, 25)),
+        daysUntilBirthday(
+          { day: 1, month: 1 },
+          { year: 2025, month: 12, day: 25 },
+        ),
       ).toBe(7);
     });
 
     it('uses the observed date for Feb 29th birthdays', () => {
       expect(
-        daysUntilBirthday({ day: 29, month: 2 }, new Date(2025, 1, 26)),
+        daysUntilBirthday(
+          { day: 29, month: 2 },
+          { year: 2025, month: 2, day: 26 },
+        ),
       ).toBe(2);
     });
   });
 
   describe('ageOnBirthday', () => {
     it('returns null without a birth year', () => {
-      expect(ageOnBirthday({ day: 5, month: 3 })).toBeNull();
+      expect(
+        ageOnBirthday({ day: 5, month: 3 }, { year: 2025, month: 3, day: 5 }),
+      ).toBeNull();
     });
 
     it('returns the age being celebrated', () => {
       expect(
-        ageOnBirthday({ day: 5, month: 3, year: 1990 }, new Date(2025, 2, 5)),
+        ageOnBirthday(
+          { day: 5, month: 3, year: 1990 },
+          { year: 2025, month: 3, day: 5 },
+        ),
       ).toBe(35);
     });
+  });
+
+  describe('civilDateIn', () => {
+    // 02:56 UTC on the 5th is still 20:56 on the 4th in Mexico City. Reading the
+    // day off the server clock is what made a same-day birthday stop matching.
+    const lateEvening = new Date('2026-09-05T02:56:00.000Z');
+
+    it('returns the date as it is in the given timezone', () => {
+      expect(civilDateIn('America/Mexico_City', lateEvening)).toEqual({
+        year: 2026,
+        month: 9,
+        day: 4,
+      });
+      expect(civilDateIn('UTC', lateEvening)).toEqual({
+        year: 2026,
+        month: 9,
+        day: 5,
+      });
+    });
+
+    it('crosses the year boundary correctly', () => {
+      expect(
+        civilDateIn('America/Mexico_City', new Date('2027-01-01T03:00:00Z')),
+      ).toEqual({ year: 2026, month: 12, day: 31 });
+    });
+
+    it('handles a timezone ahead of UTC', () => {
+      expect(
+        civilDateIn('Asia/Tokyo', new Date('2026-09-04T20:00:00Z')),
+      ).toEqual({ year: 2026, month: 9, day: 5 });
+    });
+
+    it('falls back to UTC for a bogus timezone instead of throwing', () => {
+      expect(civilDateIn('Not/AZone', lateEvening)).toEqual({
+        year: 2026,
+        month: 9,
+        day: 5,
+      });
+    });
+  });
+
+  describe('isValidTimeZone', () => {
+    it.each(['UTC', 'America/Mexico_City', 'Europe/Madrid'])(
+      'accepts %s',
+      (zone) => expect(isValidTimeZone(zone)).toBe(true),
+    );
+
+    it.each(['Not/AZone', 'Mexico City', ''])('rejects %s', (zone) =>
+      expect(isValidTimeZone(zone)).toBe(false),
+    );
   });
 
   describe('formatDayMonth', () => {
