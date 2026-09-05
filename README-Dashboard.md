@@ -19,7 +19,26 @@ cada petición. Al expirar, el panel redirige al login automáticamente.
 | **Resumen** | KPIs (totales, hoy, mes, promedio diario, usuarios activos, cumpleaños), gráfico de actividad de 30 días, top 5 receptores y próximos cumpleaños. Avisa si alguien cumple hoy. |
 | **Ranking** | Todos los usuarios ordenados por burritos recibidos o dados, con buscador y barras de proporción. |
 | **Movimientos** | Historial completo de burritos entregados, paginado de 25 en 25, con fecha absoluta y relativa. |
-| **Cumpleaños** | Alta/edición y borrado de cumpleaños, más el botón «Anunciar ahora» que publica el saludo del día. |
+| **Cumpleaños** | Estado del saludo automático, quién cumple hoy, alta/edición/borrado y envío manual. |
+
+## La sección de Cumpleaños
+
+Está construida alrededor de una pregunta: **¿se va a enviar el saludo o no?**
+
+1. **Banner de estado.** Verde cuando el saludo diario está activo, indicando
+   canal, hora y próxima ejecución. Rojo cuando no lo está, diciendo exactamente
+   qué falta (normalmente `BIRTHDAY_CHANNEL`). Sin esto, un canal mal configurado
+   se traduce en silencio absoluto y nadie sabe por qué.
+2. **Cumplen hoy.** Panel con quién cumple hoy y si ya recibió su saludo, más un
+   botón «Saludar ahora».
+3. **Formulario.** Selects de día y mes (el día se ajusta al mes y a los años
+   bisiestos), año opcional, canal opcional y una casilla **«Saludar de inmediato
+   si la fecha es hoy»**, activa por defecto: el cron solo corre una vez al día,
+   así que sin esto un cumpleaños dado de alta por la tarde no se saludaría.
+   El campo de usuario ofrece autocompletado con los Slack IDs que ya conoce la
+   app.
+4. **Tabla.** Con cuenta regresiva («hoy», «en 3 días»), último saludo enviado y
+   acciones de editar y eliminar. «Editar» carga el registro en el formulario.
 
 ## Detalles de implementación
 

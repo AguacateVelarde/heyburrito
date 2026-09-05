@@ -84,6 +84,12 @@
         box-sizing: border-box;
       }
 
+      /* Author display rules (.button is inline-flex) outrank the user agent's
+         [hidden] rule, so hidden elements would still paint without this. */
+      [hidden] {
+        display: none !important;
+      }
+
       body {
         margin: 0;
         background: var(--bg);
@@ -594,7 +600,8 @@
 
       input[type='text'],
       input[type='password'],
-      input[type='search'] {
+      input[type='search'],
+      select {
         width: 100%;
         padding: 0.5rem 0.7rem;
         border: 1px solid var(--border-strong);
@@ -602,6 +609,11 @@
         background: var(--surface);
         color: var(--text);
         font: inherit;
+      }
+
+      input[readonly] {
+        background: var(--surface-2);
+        color: var(--text-muted);
       }
 
       input:focus-visible,
@@ -617,9 +629,58 @@
 
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 0.9rem;
-        align-items: end;
+        align-items: start;
+      }
+
+      /* Spans the whole row: the user field and the actions row. */
+      .field--wide {
+        grid-column: 1 / -1;
+      }
+
+      .checkbox {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .checkbox input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .form-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .row-actions {
+        white-space: nowrap;
+        text-align: right;
+      }
+
+      .row-actions .button + .button {
+        margin-left: 0.25rem;
+      }
+
+      .button--ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--text-muted);
+        padding: 0.3rem 0.55rem;
+      }
+
+      .button--ghost:hover:not(:disabled) {
+        background: var(--surface-hover);
+        border-color: transparent;
+        color: var(--text);
       }
 
       /* Needs `input.search` to outrank the `input[type='search']` rule above;
@@ -688,6 +749,21 @@
       .banner--party {
         background: var(--accent-soft);
         color: var(--accent);
+      }
+
+      .banner--ok {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      /* The banners carry a title plus a detail line, so top-align the icon. */
+      .banner {
+        align-items: flex-start;
+      }
+
+      .banner .stat__hint {
+        color: inherit;
+        opacity: 0.85;
       }
 
       .toasts {

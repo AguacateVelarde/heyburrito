@@ -4,6 +4,10 @@ import { UsersService } from '../users/users.service';
 import { BirthdaysService } from '../birthdays/birthdays.service';
 import { BirthdayAnnouncerService } from '../slack/birthday-announcer.service';
 import { UpsertBirthdayDto } from '../birthdays/dto/upsert-birthday.dto';
+import {
+  daysUntilBirthday,
+  isCelebratedOn,
+} from '../birthdays/birthday-date.util';
 import { AnnounceBirthdayDto } from '../birthdays/dto/announce-birthday.dto';
 
 const ACTIVITY_DAYS = 30;
@@ -110,6 +114,7 @@ export class AdminService {
       leaderboard,
       activity,
       birthdayStats,
+      birthdayStatus: this.getBirthdayStatus(),
       generatedAt: new Date().toISOString(),
     };
   }
@@ -123,7 +128,19 @@ export class AdminService {
   }
 
   async getBirthdays() {
-    return this.birthdaysService.findAll();
+    const birthdays = await this.birthdaysService.findAll();
+    const now = new Date();
+
+    return birthdays.map((birthday) => ({
+      ...birthday.toObject(),
+      daysUntil: daysUntilBirthday(birthday, now),
+      isToday: isCelebratedOn(birthday, now),
+      greetedThisYear: this.birthdaysService.alreadyGreeted(birthday, now),
+    }));
+  }
+
+  getBirthdayStatus() {
+    return this.birthdayAnnouncer.getStatus();
   }
 
   async getUpcomingBirthdays(limit: number) {
@@ -134,8 +151,37 @@ export class AdminService {
     }));
   }
 
-  async saveBirthday(dto: UpsertBirthdayDto) {
-    return this.birthdaysService.upsert(dto);
+  async saveBirthday({ announceIfToday, ...dto }: UpsertBirthdayDto) {
+    const birthday = await this.birthdaysService.upsert(dto);
+    const celebratesToday = isCelebratedOn(birthday, new Date());
+
+    if (!announceIfToday || !celebratesToday) {
+      return {
+        birthday,
+        celebratesToday,
+        announced: null,
+        announceError: null,
+      };
+    }
+
+    // The save already succeeded, so a Slack failure is reported alongside it
+    // rather than rolling the whole request back.
+    try {
+      const result = await this.birthdayAnnouncer.announce({ force: true });
+      return {
+        birthday,
+        celebratesToday,
+        announced: result.announced.map((entry) => entry.slackId),
+        announceError: null,
+      };
+    } catch (error) {
+      return {
+        birthday,
+        celebratesToday,
+        announced: null,
+        announceError: error.response?.message ?? error.message,
+      };
+    }
   }
 
   async deleteBirthday(slackId: string) {

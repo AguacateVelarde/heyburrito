@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -35,4 +36,13 @@ export class UpsertBirthdayDto {
   @IsOptional()
   @IsString()
   channelId?: string;
+
+  /**
+   * Post the greeting straight away when the birthday being saved is today.
+   * The daily cron only fires once, so without this a birthday added after
+   * that hour would go unnoticed until next year.
+   */
+  @IsOptional()
+  @IsBoolean()
+  announceIfToday?: boolean;
 }

@@ -32,6 +32,19 @@ export interface AnnounceResult {
   channels: string[];
 }
 
+/** Why the daily job is not running, when it is not. */
+export type ScheduleProblem = 'disabled' | 'no-channel' | 'invalid-cron';
+
+export interface BirthdayStatus {
+  enabled: boolean;
+  channel: string | null;
+  cron: string;
+  timezone: string;
+  scheduled: boolean;
+  nextRun: string | null;
+  problem: ScheduleProblem | null;
+}
+
 /**
  * Posts the daily birthday greeting to the team channel, @-mentioning whoever
  * is celebrating. Runs on a configurable cron and can also be triggered
@@ -40,6 +53,9 @@ export interface AnnounceResult {
 @Injectable()
 export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BirthdayAnnouncerService.name);
+
+  /** Set during bootstrap so the admin UI can explain a silent daily job. */
+  private scheduleProblem: ScheduleProblem | null = null;
 
   constructor(
     private readonly birthdaysService: BirthdaysService,
@@ -51,11 +67,13 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.configService.areBirthdaysEnabled) {
+      this.scheduleProblem = 'disabled';
       this.logger.log('Birthdays are disabled, daily greeting not scheduled.');
       return;
     }
 
     if (!this.configService.birthdayChannel) {
+      this.scheduleProblem = 'no-channel';
       this.logger.warn(
         'No BIRTHDAY_CHANNEL/SLACK_DEFAULT_CHANNEL configured, daily greeting not scheduled.',
       );
@@ -79,10 +97,36 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
         `Daily birthday greeting scheduled ("${cronTime}", ${timeZone}).`,
       );
     } catch (error) {
+      this.scheduleProblem = 'invalid-cron';
       this.logger.error(
         `Could not schedule the birthday greeting with "${cronTime}": ${error.message}`,
       );
     }
+  }
+
+  /** Configuration and schedule state, for the admin dashboard. */
+  getStatus(): BirthdayStatus {
+    const scheduled = this.scheduleProblem === null;
+
+    let nextRun: string | null = null;
+    if (scheduled) {
+      try {
+        const job = this.schedulerRegistry.getCronJob(BIRTHDAY_CRON_JOB);
+        nextRun = job.nextDate().toJSDate().toISOString();
+      } catch {
+        // The job is gone (never registered, or already torn down).
+      }
+    }
+
+    return {
+      enabled: this.configService.areBirthdaysEnabled,
+      channel: this.configService.birthdayChannel || null,
+      cron: this.configService.birthdayCron,
+      timezone: this.configService.birthdayTimezone,
+      scheduled,
+      nextRun,
+      problem: this.scheduleProblem,
+    };
   }
 
   onModuleDestroy() {

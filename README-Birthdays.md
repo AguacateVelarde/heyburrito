@@ -54,12 +54,37 @@ All endpoints require the admin JWT (`Authorization: Bearer <token>`).
 | --- | --- | --- | --- |
 | `GET` | `/admin/birthdays` | — | Every registered birthday. |
 | `GET` | `/admin/birthdays/upcoming` | `?limit=5` | Upcoming birthdays with `daysUntil`. |
-| `POST` | `/admin/birthdays` | `{ slackId, day, month, year?, name?, channelId? }` | Creates or updates a birthday. |
+| `GET` | `/admin/birthdays/status` | — | Whether the daily job is scheduled, on which channel, its next run, and why it is not running otherwise. |
+| `POST` | `/admin/birthdays` | `{ slackId, day, month, year?, name?, channelId?, announceIfToday? }` | Creates or updates a birthday. With `announceIfToday`, a birthday that falls today is greeted immediately. |
 | `DELETE` | `/admin/birthdays/:slackId` | — | Deletes a birthday (404 when unknown). |
 | `POST` | `/admin/birthdays/announce` | `{ channel?, force? }` | Triggers the greeting manually. Returns 422 with the Slack reason when the channel rejects the post. |
 
 These endpoints also back the **Cumpleaños** section of the
 [admin dashboard](./README-Dashboard.md).
+
+## Troubleshooting: the greeting never goes out
+
+The daily job is only scheduled when the module is fully configured. When it is
+not, the app logs a warning at boot and the dashboard shows a red banner in
+**Cumpleaños** naming the exact problem. `GET /admin/birthdays/status` returns
+the same information:
+
+| `problem` | Meaning | Fix |
+| --- | --- | --- |
+| `no-channel` | Neither `BIRTHDAY_CHANNEL` nor `SLACK_DEFAULT_CHANNEL` is set | Set one, invite the bot to the channel, restart |
+| `disabled` | `ENABLE_BIRTHDAYS=false` | Set it to `true` and restart |
+| `invalid-cron` | `BIRTHDAY_CRON` is not a valid expression | Fix the expression and restart |
+
+**The cron only fires once a day.** A birthday added after that hour would
+otherwise wait until next year, so:
+
+- the dashboard form has a **"Saludar de inmediato si la fecha es hoy"** checkbox,
+  on by default, which posts the greeting as soon as the record is saved;
+- the **Cumplen hoy** panel has a **Saludar ahora** button;
+- `/cumpleanos announce` does the same from Slack.
+
+All three post the same grouped message and mark the greeting as sent, so the
+cron will not repeat it.
 
 ## Details worth knowing
 
