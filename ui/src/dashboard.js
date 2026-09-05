@@ -455,6 +455,7 @@ async function renderOverview() {
   const data = await api('/admin/dashboard');
   const { burritoStats, userStats, birthdayStats, leaderboard, activity } =
     data;
+  const birthdayStatus = data.birthdayStatus;
 
   const celebratingToday = birthdayStats.today.length > 0;
   const celebratingNames = birthdayStats.today
@@ -508,6 +509,24 @@ async function renderOverview() {
           el('span', {
             text: `Hoy cumple${birthdayStats.today.length > 1 ? 'n' : ''} años: ${celebratingNames}`,
           }),
+        ])
+      : null,
+
+    // Silence is the worst failure mode here: without this, a missing channel
+    // just means nobody ever gets greeted and nothing says why.
+    birthdayStatus && !birthdayStatus.scheduled && birthdayStats.total > 0
+      ? el('div', { className: 'banner banner--error' }, [
+          el('span', { text: '⚠', 'aria-hidden': 'true' }),
+          el('span', {}, [
+            el('strong', {
+              text: 'El saludo de cumpleaños no se está enviando. ',
+            }),
+            el('a', {
+              href: '#birthdays',
+              text: 'Ver el detalle en Cumpleaños',
+              style: 'color:inherit',
+            }),
+          ]),
         ])
       : null,
 
@@ -772,13 +791,382 @@ async function renderTransactions() {
   ]);
 }
 
+const MONTH_NAMES = Array.from({ length: 12 }, (_, index) =>
+  new Intl.DateTimeFormat('es', { month: 'long' }).format(
+    new Date(2021, index, 1),
+  ),
+);
+
+function daysInMonthUi(month, year) {
+  if (month === 2) {
+    const leap = year
+      ? (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+      : true;
+    return leap ? 29 : 28;
+  }
+  return [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+/** Explains, in one line, whether the daily greeting will actually go out. */
+function birthdayStatusBanner(status) {
+  if (status.scheduled) {
+    return el('div', { className: 'banner banner--ok' }, [
+      el('span', { text: '✓', 'aria-hidden': 'true' }),
+      el('span', {}, [
+        el('strong', { text: 'Saludo automático activo. ' }),
+        el('span', {
+          text: `Se publica en ${status.channel} a las ${cronHour(status.cron)} (${status.timezone}).`,
+        }),
+        status.nextRun
+          ? el('div', {
+              className: 'stat__hint',
+              text: `Próxima ejecución: ${formatDateTime(status.nextRun)} (${formatRelative(status.nextRun)}).`,
+            })
+          : null,
+      ]),
+    ]);
+  }
+
+  const problems = {
+    'no-channel': {
+      title: 'El saludo automático NO se está enviando.',
+      detail:
+        'Falta el canal. Define BIRTHDAY_CHANNEL (o SLACK_DEFAULT_CHANNEL) en el entorno, invita al bot al canal y reinicia la app.',
+    },
+    disabled: {
+      title: 'El módulo de cumpleaños está desactivado.',
+      detail: 'Pon ENABLE_BIRTHDAYS=true en el entorno y reinicia la app.',
+    },
+    'invalid-cron': {
+      title: 'El saludo automático NO se está enviando.',
+      detail: `La expresión BIRTHDAY_CRON ("${status.cron}") no es válida.`,
+    },
+  };
+
+  const problem = problems[status.problem] ?? {
+    title: 'El saludo automático NO se está enviando.',
+    detail: 'Revisa la configuración del módulo de cumpleaños.',
+  };
+
+  return el('div', { className: 'banner banner--error' }, [
+    el('span', { text: '⚠', 'aria-hidden': 'true' }),
+    el('span', {}, [
+      el('strong', { text: `${problem.title} ` }),
+      el('span', { text: problem.detail }),
+    ]),
+  ]);
+}
+
+function cronHour(cron) {
+  const [minute, hour] = String(cron).split(' ');
+  if (!/^\d+$/.test(hour ?? '') || !/^\d+$/.test(minute ?? '')) return cron;
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+}
+
 async function renderBirthdays() {
-  const birthdays = await api('/admin/birthdays');
+  const [birthdays, status, users] = await Promise.all([
+    api('/admin/birthdays'),
+    api('/admin/birthdays/status'),
+    api('/admin/users'),
+  ]);
+
+  const celebrants = birthdays.filter((birthday) => birthday.isToday);
+  const canPost = Boolean(status.channel) && status.enabled;
+
+  /* ---------------------------------------------------------- greet now */
+
+  async function greetNow(button, label) {
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'Enviando…';
+    try {
+      const result = await api('/admin/birthdays/announce', {
+        method: 'POST',
+        body: { force: true },
+      });
+      toast(
+        result.announced.length
+          ? `Saludo publicado para ${result.announced.join(', ')}`
+          : 'Hoy no cumple años nadie registrado',
+        result.announced.length ? 'success' : '',
+      );
+      refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+      button.disabled = false;
+      button.textContent = original ?? label;
+    }
+  }
+
+  const todayPanel = celebrants.length
+    ? panel({
+        title: `🎉 Cumplen hoy (${celebrants.length})`,
+        hint: celebrants.every((person) => person.greetedThisYear)
+          ? 'Ya recibieron su saludo este año'
+          : 'Todavía sin saludar',
+        actions: [
+          el('button', {
+            className: 'button button--primary',
+            type: 'button',
+            text: '📣 Saludar ahora',
+            disabled: !canPost,
+            title: canPost
+              ? 'Publica el saludo en el canal ahora mismo'
+              : 'Configura BIRTHDAY_CHANNEL para poder publicar',
+            on: {
+              click: (event) => greetNow(event.currentTarget),
+            },
+          }),
+        ],
+        flush: true,
+        body: table(
+          [{ label: 'Usuario' }, { label: 'Fecha' }, { label: 'Saludo' }],
+          celebrants.map((person) =>
+            el('tr', {}, [
+              el('td', {}, userCell(person.slackId, person.name)),
+              el('td', { text: formatDayMonth(person.day, person.month) }),
+              el('td', {}, [
+                el('span', {
+                  className: `badge${person.greetedThisYear ? ' badge--soon' : ''}`,
+                  text: person.greetedThisYear ? 'enviado' : 'pendiente',
+                }),
+              ]),
+            ]),
+          ),
+        ),
+      })
+    : null;
+
+  /* --------------------------------------------------------------- form */
+
+  const userOptions = el(
+    'datalist',
+    { id: 'knownUsers' },
+    users.map((user) =>
+      el('option', {
+        value: user.slackId,
+        label: user.name || user.slackId,
+      }),
+    ),
+  );
+
+  const slackIdInput = el('input', {
+    type: 'text',
+    placeholder: 'U012ABCDEF',
+    list: 'knownUsers',
+    required: true,
+    'aria-label': 'Usuario de Slack',
+  });
+  const daySelect = el('select', { 'aria-label': 'Día' });
+  const monthSelect = el(
+    'select',
+    {
+      'aria-label': 'Mes',
+      on: { change: () => syncDays() },
+    },
+    MONTH_NAMES.map((name, index) =>
+      el('option', { value: String(index + 1), text: name }),
+    ),
+  );
+  const yearInput = el('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    placeholder: 'p. ej. 1990',
+    'aria-label': 'Año de nacimiento',
+    on: { input: () => syncDays() },
+  });
+  const channelInput = el('input', {
+    type: 'text',
+    placeholder: 'C012ABCDEF',
+    'aria-label': 'Canal',
+  });
+  const announceCheckbox = el('input', {
+    type: 'checkbox',
+    checked: true,
+    id: 'announceIfToday',
+  });
+  const submitButton = el('button', {
+    className: 'button button--primary',
+    type: 'submit',
+    text: 'Guardar',
+  });
+  const cancelButton = el('button', {
+    className: 'button',
+    type: 'button',
+    text: 'Cancelar',
+    hidden: true,
+    on: { click: () => resetForm() },
+  });
+  const formTitle = el('h2', {
+    className: 'panel__title',
+    text: 'Agregar cumpleaños',
+  });
+
+  /** Keeps the day list honest for the selected month (and leap years). */
+  function syncDays() {
+    const month = Number(monthSelect.value);
+    const year = Number(yearInput.value) || undefined;
+    const total = daysInMonthUi(month, year);
+    const previous = Number(daySelect.value) || 1;
+
+    clear(daySelect).append(
+      ...Array.from({ length: total }, (_, index) =>
+        el('option', { value: String(index + 1), text: String(index + 1) }),
+      ),
+    );
+    daySelect.value = String(Math.min(previous, total));
+  }
+
+  function resetForm() {
+    slackIdInput.value = '';
+    slackIdInput.readOnly = false;
+    yearInput.value = '';
+    channelInput.value = '';
+    announceCheckbox.checked = true;
+    const now = new Date();
+    monthSelect.value = String(now.getMonth() + 1);
+    syncDays();
+    daySelect.value = String(now.getDate());
+    formTitle.textContent = 'Agregar cumpleaños';
+    submitButton.textContent = 'Guardar';
+    cancelButton.hidden = true;
+  }
+
+  function loadIntoForm(birthday) {
+    slackIdInput.value = birthday.slackId;
+    slackIdInput.readOnly = true;
+    monthSelect.value = String(birthday.month);
+    yearInput.value = birthday.year ? String(birthday.year) : '';
+    syncDays();
+    daySelect.value = String(birthday.day);
+    channelInput.value = birthday.channelId ?? '';
+    announceCheckbox.checked = false;
+    formTitle.textContent = `Editando a ${birthday.name || birthday.slackId}`;
+    submitButton.textContent = 'Guardar cambios';
+    cancelButton.hidden = false;
+    slackIdInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  const form = el(
+    'form',
+    {
+      className: 'form-grid',
+      on: {
+        submit: async (event) => {
+          event.preventDefault();
+
+          const slackId = slackIdInput.value.trim();
+          if (!slackId) {
+            toast('Falta el usuario de Slack', 'error');
+            return;
+          }
+
+          const year = yearInput.value.trim();
+          if (year && !/^\d{4}$/.test(year)) {
+            toast('El año debe tener 4 dígitos', 'error');
+            return;
+          }
+
+          submitButton.disabled = true;
+          try {
+            const result = await api('/admin/birthdays', {
+              method: 'POST',
+              body: {
+                slackId,
+                day: Number(daySelect.value),
+                month: Number(monthSelect.value),
+                ...(year ? { year: Number(year) } : {}),
+                ...(channelInput.value.trim()
+                  ? { channelId: channelInput.value.trim() }
+                  : {}),
+                announceIfToday: announceCheckbox.checked,
+              },
+            });
+
+            toast(`Cumpleaños de ${slackId} guardado`, 'success');
+            if (result.announceError) {
+              toast(`No se pudo saludar: ${result.announceError}`, 'error');
+            } else if (result.announced?.length) {
+              toast(
+                `🎉 Saludo publicado para ${result.announced.join(', ')}`,
+                'success',
+              );
+            } else if (result.celebratesToday && !announceCheckbox.checked) {
+              toast('Cumple hoy. Usa «Saludar ahora» cuando quieras enviarlo.');
+            }
+            refresh();
+          } catch (error) {
+            toast(error.message, 'error');
+          } finally {
+            submitButton.disabled = false;
+          }
+        },
+      },
+    },
+    [
+      userOptions,
+      el('label', { className: 'field field--wide' }, [
+        el('span', { className: 'field__label', text: 'Usuario de Slack *' }),
+        slackIdInput,
+        el('span', {
+          className: 'field__hint',
+          text: 'En Slack: abre su perfil › Más › Copiar ID de miembro',
+        }),
+      ]),
+      el('label', { className: 'field' }, [
+        el('span', { className: 'field__label', text: 'Día *' }),
+        daySelect,
+      ]),
+      el('label', { className: 'field' }, [
+        el('span', { className: 'field__label', text: 'Mes *' }),
+        monthSelect,
+      ]),
+      el('label', { className: 'field' }, [
+        el('span', { className: 'field__label', text: 'Año' }),
+        yearInput,
+        el('span', {
+          className: 'field__hint',
+          text: 'Opcional, para la edad',
+        }),
+      ]),
+      el('label', { className: 'field' }, [
+        el('span', { className: 'field__label', text: 'Canal' }),
+        channelInput,
+        el('span', {
+          className: 'field__hint',
+          text: status.channel ? `Por defecto: ${status.channel}` : 'Opcional',
+        }),
+      ]),
+      el('div', { className: 'field field--wide' }, [
+        el('label', { className: 'checkbox' }, [
+          announceCheckbox,
+          el('span', { text: 'Saludar de inmediato si la fecha es hoy' }),
+        ]),
+        el('div', { className: 'form-actions' }, [submitButton, cancelButton]),
+      ]),
+    ],
+  );
+
+  resetForm();
+
+  /* -------------------------------------------------------------- table */
 
   const rows = birthdays.map((birthday) =>
     el('tr', {}, [
       el('td', {}, userCell(birthday.slackId, birthday.name)),
       el('td', { text: formatDayMonth(birthday.day, birthday.month) }),
+      el('td', {}, [
+        el('span', {
+          className: `badge${
+            birthday.daysUntil === 0
+              ? ' badge--today'
+              : birthday.daysUntil <= 7
+                ? ' badge--soon'
+                : ''
+          }`,
+          text: describeDelay(birthday.daysUntil),
+        }),
+      ]),
       el('td', { text: birthday.year ? String(birthday.year) : '—' }),
       el('td', {}, [
         birthday.channelId
@@ -790,7 +1178,13 @@ async function renderBirthdays() {
           ? formatDateTime(birthday.lastGreetedAt)
           : '—',
       }),
-      el('td', { className: 'num' }, [
+      el('td', { className: 'num row-actions' }, [
+        el('button', {
+          className: 'button button--ghost',
+          type: 'button',
+          text: 'Editar',
+          on: { click: () => loadIntoForm(birthday) },
+        }),
         el('button', {
           className: 'button button--danger',
           type: 'button',
@@ -798,25 +1192,20 @@ async function renderBirthdays() {
           title: `Eliminar el cumpleaños de ${birthday.slackId}`,
           on: {
             click: async (event) => {
-              if (
-                !window.confirm(
-                  `¿Eliminar el cumpleaños de ${birthday.slackId}?`,
-                )
-              ) {
-                return;
-              }
-              event.target.disabled = true;
+              const who = birthday.name || birthday.slackId;
+              if (!window.confirm(`¿Eliminar el cumpleaños de ${who}?`)) return;
+
+              const button = event.currentTarget;
+              button.disabled = true;
               try {
                 await api(
                   `/admin/birthdays/${encodeURIComponent(birthday.slackId)}`,
-                  {
-                    method: 'DELETE',
-                  },
+                  { method: 'DELETE' },
                 );
                 toast('Cumpleaños eliminado', 'success');
                 refresh();
               } catch (error) {
-                event.target.disabled = false;
+                button.disabled = false;
                 toast(error.message, 'error');
               }
             },
@@ -826,128 +1215,6 @@ async function renderBirthdays() {
     ]),
   );
 
-  const slackIdInput = el('input', {
-    type: 'text',
-    placeholder: 'U012ABCDEF',
-    required: true,
-    'aria-label': 'Slack ID',
-  });
-  const dateInput = el('input', {
-    type: 'text',
-    placeholder: '05/03 o 05/03/1990',
-    required: true,
-    'aria-label': 'Fecha de cumpleaños',
-  });
-  const nameInput = el('input', {
-    type: 'text',
-    placeholder: 'Opcional',
-    'aria-label': 'Nombre',
-  });
-  const channelInput = el('input', {
-    type: 'text',
-    placeholder: 'Opcional, p. ej. C012ABCDEF',
-    'aria-label': 'Canal',
-  });
-  const submitButton = el('button', {
-    className: 'button button--primary',
-    type: 'submit',
-    text: 'Guardar',
-  });
-
-  const form = el(
-    'form',
-    {
-      className: 'form-grid',
-      on: {
-        submit: async (event) => {
-          event.preventDefault();
-
-          const slackId = slackIdInput.value.trim();
-          const parsed = parseBirthdayInput(dateInput.value);
-
-          if (!slackId) {
-            toast('Falta el Slack ID', 'error');
-            return;
-          }
-          if (!parsed) {
-            toast('Fecha inválida. Usa DD/MM o DD/MM/AAAA', 'error');
-            return;
-          }
-
-          submitButton.disabled = true;
-          try {
-            await api('/admin/birthdays', {
-              method: 'POST',
-              body: {
-                slackId,
-                ...parsed,
-                ...(nameInput.value.trim()
-                  ? { name: nameInput.value.trim() }
-                  : {}),
-                ...(channelInput.value.trim()
-                  ? { channelId: channelInput.value.trim() }
-                  : {}),
-              },
-            });
-            toast(`Cumpleaños de ${slackId} guardado`, 'success');
-            refresh();
-          } catch (error) {
-            toast(error.message, 'error');
-          } finally {
-            submitButton.disabled = false;
-          }
-        },
-      },
-    },
-    [
-      el('label', { className: 'field' }, [
-        el('span', { className: 'field__label', text: 'Slack ID *' }),
-        slackIdInput,
-      ]),
-      el('label', { className: 'field' }, [
-        el('span', { className: 'field__label', text: 'Fecha *' }),
-        dateInput,
-      ]),
-      el('label', { className: 'field' }, [
-        el('span', { className: 'field__label', text: 'Nombre' }),
-        nameInput,
-      ]),
-      el('label', { className: 'field' }, [
-        el('span', { className: 'field__label', text: 'Canal' }),
-        channelInput,
-      ]),
-      el('div', {}, submitButton),
-    ],
-  );
-
-  const announceButton = el('button', {
-    className: 'button',
-    type: 'button',
-    text: '📣 Anunciar ahora',
-    title: 'Publica el saludo de hoy aunque ya se haya enviado',
-    on: {
-      click: async (event) => {
-        event.target.disabled = true;
-        try {
-          const result = await api('/admin/birthdays/announce', {
-            method: 'POST',
-            body: { force: true },
-          });
-          toast(
-            result.announced.length
-              ? `Saludo publicado para ${result.announced.join(', ')}`
-              : 'Hoy no cumple años nadie registrado',
-            result.announced.length ? 'success' : '',
-          );
-        } catch (error) {
-          toast(error.message, 'error');
-        } finally {
-          event.target.disabled = false;
-        }
-      },
-    },
-  });
-
   return el('div', { className: 'section' }, [
     el('div', {}, [
       el('h1', { className: 'section__title', text: 'Cumpleaños' }),
@@ -956,28 +1223,42 @@ async function renderBirthdays() {
         text: 'El bot saluda cada día en el canal configurado, arrobando a quien cumple.',
       }),
     ]),
-    panel({
-      title: 'Agregar o actualizar',
-      hint: 'Un Slack ID existente se sobrescribe',
-      body: form,
-    }),
+
+    birthdayStatusBanner(status),
+    todayPanel,
+
+    el('section', { className: 'panel' }, [
+      el('div', { className: 'panel__head' }, [
+        formTitle,
+        el('span', {
+          className: 'panel__hint',
+          text: 'Un usuario ya registrado se sobrescribe',
+        }),
+      ]),
+      el('div', { className: 'panel__body' }, form),
+    ]),
+
     panel({
       title: 'Registrados',
       hint: `${formatNumber(birthdays.length)} en total`,
-      actions: [announceButton],
       flush: true,
       body:
         table(
           [
             { label: 'Usuario' },
             { label: 'Fecha' },
+            { label: 'Próximo' },
             { label: 'Año' },
             { label: 'Canal' },
             { label: 'Último saludo' },
             { label: '', numeric: true },
           ],
           rows,
-        ) ?? emptyState('Sin cumpleaños registrados', '🎂'),
+        ) ??
+        emptyState(
+          'Sin cumpleaños registrados. Agrega el primero arriba.',
+          '🎂',
+        ),
     }),
   ]);
 }

@@ -25,11 +25,19 @@ const mockBirthdaysService = {
   findUpcoming: jest.fn(),
   remove: jest.fn(),
   upsert: jest.fn(),
+  alreadyGreeted: jest.fn().mockReturnValue(false),
 };
 
 const mockAnnouncer = {
   announce: jest.fn(),
+  getStatus: jest.fn(),
 };
+
+/** Minimal stand-in for a Mongoose document. */
+const doc = (fields: Record<string, unknown>) => ({
+  ...fields,
+  toObject: () => ({ ...fields }),
+});
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -134,6 +142,127 @@ describe('AdminService', () => {
         day: 5,
         month: 3,
         daysUntil: 0,
+      });
+    });
+  });
+
+  describe('getBirthdays', () => {
+    it('adds the countdown so the UI does not redo the date maths', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-04T12:00:00Z'));
+      mockBirthdaysService.findAll.mockResolvedValue([
+        doc({ slackId: 'U1', day: 4, month: 9 }),
+        doc({ slackId: 'U2', day: 7, month: 9 }),
+      ]);
+
+      const result = await service.getBirthdays();
+
+      expect(result[0]).toMatchObject({
+        slackId: 'U1',
+        daysUntil: 0,
+        isToday: true,
+        greetedThisYear: false,
+      });
+      expect(result[1]).toMatchObject({
+        slackId: 'U2',
+        daysUntil: 3,
+        isToday: false,
+      });
+
+      jest.useRealTimers();
+    });
+  });
+
+  describe('saveBirthday', () => {
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-04T12:00:00Z'));
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('greets right away when the saved birthday is today', async () => {
+      mockBirthdaysService.upsert.mockResolvedValue({ day: 4, month: 9 });
+      mockAnnouncer.announce.mockResolvedValue({
+        announced: [{ slackId: 'U1' }],
+        skipped: [],
+        channels: ['C1'],
+      });
+
+      const result = await service.saveBirthday({
+        slackId: 'U1',
+        day: 4,
+        month: 9,
+        announceIfToday: true,
+      });
+
+      expect(mockAnnouncer.announce).toHaveBeenCalledWith({ force: true });
+      expect(result).toMatchObject({
+        celebratesToday: true,
+        announced: ['U1'],
+        announceError: null,
+      });
+    });
+
+    it('does not greet when the birthday is not today', async () => {
+      mockBirthdaysService.upsert.mockResolvedValue({ day: 15, month: 6 });
+
+      const result = await service.saveBirthday({
+        slackId: 'U1',
+        day: 15,
+        month: 6,
+        announceIfToday: true,
+      });
+
+      expect(mockAnnouncer.announce).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ celebratesToday: false, announced: null });
+    });
+
+    it('does not greet when the caller did not ask for it', async () => {
+      mockBirthdaysService.upsert.mockResolvedValue({ day: 4, month: 9 });
+
+      const result = await service.saveBirthday({
+        slackId: 'U1',
+        day: 4,
+        month: 9,
+      });
+
+      expect(mockAnnouncer.announce).not.toHaveBeenCalled();
+      expect(result.celebratesToday).toBe(true);
+    });
+
+    it('keeps the save when the greeting fails', async () => {
+      mockBirthdaysService.upsert.mockResolvedValue({ day: 4, month: 9 });
+      mockAnnouncer.announce.mockRejectedValue({
+        response: { message: 'no channel configured' },
+      });
+
+      const result = await service.saveBirthday({
+        slackId: 'U1',
+        day: 4,
+        month: 9,
+        announceIfToday: true,
+      });
+
+      expect(result).toMatchObject({
+        celebratesToday: true,
+        announced: null,
+        announceError: 'no channel configured',
+      });
+      expect(result.birthday).toBeDefined();
+    });
+
+    it('never passes announceIfToday through to the store', async () => {
+      mockBirthdaysService.upsert.mockResolvedValue({ day: 15, month: 6 });
+
+      await service.saveBirthday({
+        slackId: 'U1',
+        day: 15,
+        month: 6,
+        announceIfToday: true,
+      });
+
+      expect(mockBirthdaysService.upsert).toHaveBeenCalledWith({
+        slackId: 'U1',
+        day: 15,
+        month: 6,
       });
     });
   });

@@ -40,6 +40,7 @@ const mockSchedulerRegistry = {
     scheduledJobs.push(job);
   }),
   deleteCronJob: jest.fn(),
+  getCronJob: jest.fn(),
 };
 
 describe('BirthdayAnnouncerService', () => {
@@ -102,6 +103,64 @@ describe('BirthdayAnnouncerService', () => {
 
       expect(() => service.onModuleInit()).not.toThrow();
       expect(mockSchedulerRegistry.addCronJob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getStatus', () => {
+    it('reports a healthy schedule with its next run', () => {
+      const nextRun = new Date('2026-09-05T15:00:00.000Z');
+      mockSchedulerRegistry.getCronJob.mockReturnValue({
+        nextDate: () => ({ toJSDate: () => nextRun }),
+      });
+
+      service.onModuleInit();
+
+      expect(service.getStatus()).toEqual({
+        enabled: true,
+        channel: 'C_GENERAL',
+        cron: '0 9 * * *',
+        timezone: 'UTC',
+        scheduled: true,
+        nextRun: nextRun.toISOString(),
+        problem: null,
+      });
+    });
+
+    it('explains a missing channel instead of failing silently', () => {
+      mockConfigService.birthdayChannel = '';
+
+      service.onModuleInit();
+      const status = service.getStatus();
+
+      expect(status).toMatchObject({
+        scheduled: false,
+        channel: null,
+        problem: 'no-channel',
+        nextRun: null,
+      });
+    });
+
+    it('explains a disabled module', () => {
+      mockConfigService.areBirthdaysEnabled = false;
+
+      service.onModuleInit();
+
+      expect(service.getStatus()).toMatchObject({
+        enabled: false,
+        scheduled: false,
+        problem: 'disabled',
+      });
+    });
+
+    it('explains an invalid cron expression', () => {
+      mockConfigService.birthdayCron = 'not-a-cron';
+
+      service.onModuleInit();
+
+      expect(service.getStatus()).toMatchObject({
+        scheduled: false,
+        problem: 'invalid-cron',
+      });
     });
   });
 

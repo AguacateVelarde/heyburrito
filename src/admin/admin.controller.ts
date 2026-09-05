@@ -86,6 +86,12 @@ export class AdminController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('birthdays/status')
+  getBirthdayStatus() {
+    return this.adminService.getBirthdayStatus();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('birthdays/upcoming')
   async getUpcomingBirthdays(@Query('limit') limit?: string) {
     return this.adminService.getUpcomingBirthdays(toPositiveInt(limit, 5, 50));
