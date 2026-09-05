@@ -26,6 +26,7 @@ const mockBirthdaysService = {
   remove: jest.fn(),
   upsert: jest.fn(),
   alreadyGreeted: jest.fn().mockReturnValue(false),
+  today: jest.fn(() => ({ year: 2026, month: 9, day: 4 })),
 };
 
 const mockAnnouncer = {
@@ -148,7 +149,6 @@ describe('AdminService', () => {
 
   describe('getBirthdays', () => {
     it('adds the countdown so the UI does not redo the date maths', async () => {
-      jest.useFakeTimers().setSystemTime(new Date('2026-09-04T12:00:00Z'));
       mockBirthdaysService.findAll.mockResolvedValue([
         doc({ slackId: 'U1', day: 4, month: 9 }),
         doc({ slackId: 'U2', day: 7, month: 9 }),
@@ -167,17 +167,26 @@ describe('AdminService', () => {
         daysUntil: 3,
         isToday: false,
       });
+    });
 
-      jest.useRealTimers();
+    it('anchors the countdown to the configured timezone', async () => {
+      // Server-local time would say the 5th here; the team's timezone says the 4th.
+      mockBirthdaysService.today.mockReturnValueOnce({
+        year: 2026,
+        month: 9,
+        day: 4,
+      });
+      mockBirthdaysService.findAll.mockResolvedValue([
+        doc({ slackId: 'U1', day: 4, month: 9 }),
+      ]);
+
+      const [entry] = await service.getBirthdays();
+
+      expect(entry).toMatchObject({ isToday: true, daysUntil: 0 });
     });
   });
 
   describe('saveBirthday', () => {
-    beforeEach(() => {
-      jest.useFakeTimers().setSystemTime(new Date('2026-09-04T12:00:00Z'));
-    });
-    afterEach(() => jest.useRealTimers());
-
     it('greets right away when the saved birthday is today', async () => {
       mockBirthdaysService.upsert.mockResolvedValue({ day: 4, month: 9 });
       mockAnnouncer.announce.mockResolvedValue({

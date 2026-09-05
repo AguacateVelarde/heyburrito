@@ -12,14 +12,18 @@ import { BirthdaysService } from '../birthdays/birthdays.service';
 import { Birthday } from '../birthdays/schemas/birthday.schema';
 import { I18nService } from '../i18n/i18n.service';
 import { ConfigService } from '../config/config.service';
-import { ageOnBirthday } from '../birthdays/birthday-date.util';
+import {
+  ageOnBirthday,
+  CivilDate,
+  isValidTimeZone,
+} from '../birthdays/birthday-date.util';
 
 export const BIRTHDAY_CRON_JOB = 'birthday-daily-greeting';
 const BIRTHDAY_GIF_QUERY = 'happy-birthday';
 
 export interface AnnounceOptions {
-  /** Day to announce for. Defaults to today. */
-  reference?: Date;
+  /** Day to announce for. Defaults to today in the configured timezone. */
+  today?: CivilDate;
   /** Overrides both the per-user channel and the configured default channel. */
   channel?: string;
   /** Greets again even if the person was already greeted this year. */
@@ -33,7 +37,11 @@ export interface AnnounceResult {
 }
 
 /** Why the daily job is not running, when it is not. */
-export type ScheduleProblem = 'disabled' | 'no-channel' | 'invalid-cron';
+export type ScheduleProblem =
+  | 'disabled'
+  | 'no-channel'
+  | 'invalid-cron'
+  | 'invalid-timezone';
 
 export interface BirthdayStatus {
   enabled: boolean;
@@ -43,6 +51,8 @@ export interface BirthdayStatus {
   scheduled: boolean;
   nextRun: string | null;
   problem: ScheduleProblem | null;
+  /** Today's date in `timezone`, so the UI can state which "today" it means. */
+  today: string;
 }
 
 /**
@@ -83,6 +93,14 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
     const cronTime = this.configService.birthdayCron;
     const timeZone = this.configService.birthdayTimezone;
 
+    if (!isValidTimeZone(timeZone)) {
+      this.scheduleProblem = 'invalid-timezone';
+      this.logger.error(
+        `BIRTHDAY_TIMEZONE "${timeZone}" is not a valid IANA timezone; daily greeting not scheduled.`,
+      );
+      return;
+    }
+
     try {
       const job = new CronJob(
         cronTime,
@@ -118,6 +136,8 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    const today = this.birthdaysService.today();
+
     return {
       enabled: this.configService.areBirthdaysEnabled,
       channel: this.configService.birthdayChannel || null,
@@ -126,6 +146,7 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
       scheduled,
       nextRun,
       problem: this.scheduleProblem,
+      today: `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`,
     };
   }
 
@@ -154,17 +175,17 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async announce({
-    reference = new Date(),
+    today = this.birthdaysService.today(),
     channel,
     force = false,
   }: AnnounceOptions = {}): Promise<AnnounceResult> {
     const defaultChannel = channel || this.configService.birthdayChannel;
 
-    const celebrants = await this.birthdaysService.findCelebrantsOn(reference);
+    const celebrants = await this.birthdaysService.findCelebrantsOn(today);
     const skipped = force
       ? []
       : celebrants.filter((birthday) =>
-          this.birthdaysService.alreadyGreeted(birthday, reference),
+          this.birthdaysService.alreadyGreeted(birthday, today),
         );
     const pending = celebrants.filter(
       (birthday) => !skipped.includes(birthday),
@@ -192,7 +213,7 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
       try {
         await this.slackService.postMessage({
           channel: target,
-          text: this.buildGreeting(group, reference),
+          text: this.buildGreeting(group, today),
           gifQuery: BIRTHDAY_GIF_QUERY,
           imageTitle: this.i18nService.translate(
             'birthday.greeting.imageTitle',
@@ -211,7 +232,7 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
       }
 
       for (const birthday of group) {
-        await this.birthdaysService.markGreeted(birthday.slackId, reference);
+        await this.birthdaysService.markGreeted(birthday.slackId, today);
         announced.push(birthday);
       }
     }
@@ -219,10 +240,10 @@ export class BirthdayAnnouncerService implements OnModuleInit, OnModuleDestroy {
     return { announced, skipped, channels: [...byChannel.keys()] };
   }
 
-  private buildGreeting(celebrants: Birthday[], reference: Date): string {
+  private buildGreeting(celebrants: Birthday[], today: CivilDate): string {
     if (celebrants.length === 1) {
       const [birthday] = celebrants;
-      const age = ageOnBirthday(birthday, reference);
+      const age = ageOnBirthday(birthday, today);
       return age
         ? this.i18nService.translate('birthday.greeting.singleWithAge', {
             userId: birthday.slackId,

@@ -3,8 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Birthday } from './schemas/birthday.schema';
 import { I18nService } from '../i18n/i18n.service';
+import { ConfigService } from '../config/config.service';
 import {
   BirthdayDateParts,
+  CivilDate,
+  civilDateIn,
   daysInMonth,
   daysUntilBirthday,
   isCelebratedOn,
@@ -31,7 +34,17 @@ export class BirthdaysService {
   constructor(
     @InjectModel(Birthday.name) private birthdayModel: Model<Birthday>,
     private i18nService: I18nService,
+    private configService: ConfigService,
   ) {}
+
+  /**
+   * Today's calendar date in the configured timezone. Everything here is
+   * anchored to this rather than to the server clock, which on a UTC container
+   * rolls over hours before the team it greets does.
+   */
+  today(at: Date = new Date()): CivilDate {
+    return civilDateIn(this.configService.birthdayTimezone, at);
+  }
 
   /** Parses a raw `DD/MM[/YYYY]` string, rejecting anything that is not a real date. */
   parseDate(raw: string): BirthdayDateParts {
@@ -100,12 +113,11 @@ export class BirthdaysService {
   }
 
   /**
-   * Active birthdays celebrated on `reference`. Feb 29th entries are picked up
-   * on Feb 28th during non-leap years, hence the extra candidate in the query.
+   * Active birthdays celebrated on `today`. Feb 29th entries are picked up on
+   * Feb 28th during non-leap years, hence the extra candidate in the query.
    */
-  async findCelebrantsOn(reference: Date = new Date()): Promise<Birthday[]> {
-    const day = reference.getDate();
-    const month = reference.getMonth() + 1;
+  async findCelebrantsOn(today: CivilDate = this.today()): Promise<Birthday[]> {
+    const { day, month } = today;
 
     const candidates: Array<{ day: number; month: number }> = [{ day, month }];
     if (month === 2 && day === 28) {
@@ -116,20 +128,20 @@ export class BirthdaysService {
       .find({ active: true, $or: candidates })
       .exec();
 
-    return found.filter((birthday) => isCelebratedOn(birthday, reference));
+    return found.filter((birthday) => isCelebratedOn(birthday, today));
   }
 
   /** Next birthdays ordered by proximity, today included. */
   async findUpcoming(
     limit = 5,
-    reference: Date = new Date(),
+    today: CivilDate = this.today(),
   ): Promise<UpcomingBirthday[]> {
     const all = await this.birthdayModel.find({ active: true }).exec();
 
     return all
       .map((birthday) => ({
         birthday,
-        daysUntil: daysUntilBirthday(birthday, reference),
+        daysUntil: daysUntilBirthday(birthday, today),
       }))
       .sort((a, b) => a.daysUntil - b.daysUntil)
       .slice(0, limit);
@@ -138,24 +150,21 @@ export class BirthdaysService {
   /** Records that `slackId` was greeted, so the daily job stays idempotent. */
   async markGreeted(
     slackId: string,
-    reference: Date = new Date(),
+    today: CivilDate = this.today(),
   ): Promise<void> {
     await this.birthdayModel
       .updateOne(
         { slackId },
         {
-          $set: {
-            lastGreetedYear: reference.getFullYear(),
-            lastGreetedAt: reference,
-          },
+          $set: { lastGreetedYear: today.year, lastGreetedAt: new Date() },
         },
       )
       .exec();
   }
 
-  /** True when the person has already been greeted in `reference`'s year. */
-  alreadyGreeted(birthday: Birthday, reference: Date = new Date()): boolean {
-    return birthday.lastGreetedYear === reference.getFullYear();
+  /** True when the person has already been greeted in `today`'s year. */
+  alreadyGreeted(birthday: Birthday, today: CivilDate = this.today()): boolean {
+    return birthday.lastGreetedYear === today.year;
   }
 
   observedDateFor(birthday: Birthday, year: number) {

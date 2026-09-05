@@ -129,13 +129,13 @@ export class AdminService {
 
   async getBirthdays() {
     const birthdays = await this.birthdaysService.findAll();
-    const now = new Date();
+    const today = this.birthdaysService.today();
 
     return birthdays.map((birthday) => ({
       ...birthday.toObject(),
-      daysUntil: daysUntilBirthday(birthday, now),
-      isToday: isCelebratedOn(birthday, now),
-      greetedThisYear: this.birthdaysService.alreadyGreeted(birthday, now),
+      daysUntil: daysUntilBirthday(birthday, today),
+      isToday: isCelebratedOn(birthday, today),
+      greetedThisYear: this.birthdaysService.alreadyGreeted(birthday, today),
     }));
   }
 
@@ -153,7 +153,10 @@ export class AdminService {
 
   async saveBirthday({ announceIfToday, ...dto }: UpsertBirthdayDto) {
     const birthday = await this.birthdaysService.upsert(dto);
-    const celebratesToday = isCelebratedOn(birthday, new Date());
+    const celebratesToday = isCelebratedOn(
+      birthday,
+      this.birthdaysService.today(),
+    );
 
     if (!announceIfToday || !celebratesToday) {
       return {

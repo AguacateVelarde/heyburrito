@@ -4,6 +4,7 @@ import { UnprocessableEntityException } from '@nestjs/common';
 import { BirthdaysService } from './birthdays.service';
 import { Birthday } from './schemas/birthday.schema';
 import { I18nService } from '../i18n/i18n.service';
+import { ConfigService } from '../config/config.service';
 
 const mockBirthdayModel = {
   find: jest.fn(),
@@ -15,6 +16,10 @@ const mockBirthdayModel = {
 
 const mockI18nService = {
   translate: jest.fn((key: string) => key),
+};
+
+const mockConfigService = {
+  birthdayTimezone: 'America/Mexico_City',
 };
 
 const exec = (value: unknown) => ({ exec: jest.fn().mockResolvedValue(value) });
@@ -31,6 +36,7 @@ describe('BirthdaysService', () => {
         BirthdaysService,
         { provide: getModelToken(Birthday.name), useValue: mockBirthdayModel },
         { provide: I18nService, useValue: mockI18nService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -132,7 +138,11 @@ describe('BirthdaysService', () => {
         ]),
       );
 
-      const result = await service.findCelebrantsOn(new Date(2025, 2, 5));
+      const result = await service.findCelebrantsOn({
+        year: 2025,
+        month: 3,
+        day: 5,
+      });
 
       expect(mockBirthdayModel.find).toHaveBeenCalledWith({
         active: true,
@@ -146,7 +156,11 @@ describe('BirthdaysService', () => {
         exec([{ slackId: 'U1', day: 29, month: 2 }]),
       );
 
-      const result = await service.findCelebrantsOn(new Date(2025, 1, 28));
+      const result = await service.findCelebrantsOn({
+        year: 2025,
+        month: 2,
+        day: 28,
+      });
 
       expect(mockBirthdayModel.find).toHaveBeenCalledWith({
         active: true,
@@ -163,7 +177,11 @@ describe('BirthdaysService', () => {
         exec([{ slackId: 'U1', day: 29, month: 2 }]),
       );
 
-      const result = await service.findCelebrantsOn(new Date(2024, 1, 28));
+      const result = await service.findCelebrantsOn({
+        year: 2024,
+        month: 2,
+        day: 28,
+      });
 
       expect(result).toEqual([]);
     });
@@ -179,7 +197,11 @@ describe('BirthdaysService', () => {
         ]),
       );
 
-      const result = await service.findUpcoming(2, new Date(2025, 2, 5));
+      const result = await service.findUpcoming(2, {
+        year: 2025,
+        month: 3,
+        day: 5,
+      });
 
       expect(result.map((r) => r.birthday.slackId)).toEqual(['TODAY', 'SOON']);
       expect(result.map((r) => r.daysUntil)).toEqual([0, 5]);
@@ -189,22 +211,54 @@ describe('BirthdaysService', () => {
   describe('markGreeted / alreadyGreeted', () => {
     it('stores the greeting year', async () => {
       mockBirthdayModel.updateOne.mockReturnValue(exec({}));
-      const reference = new Date(2025, 2, 5);
 
-      await service.markGreeted('U1', reference);
+      await service.markGreeted('U1', { year: 2025, month: 3, day: 5 });
 
       expect(mockBirthdayModel.updateOne).toHaveBeenCalledWith(
         { slackId: 'U1' },
-        { $set: { lastGreetedYear: 2025, lastGreetedAt: reference } },
+        {
+          $set: {
+            lastGreetedYear: 2025,
+            lastGreetedAt: expect.any(Date),
+          },
+        },
       );
     });
 
     it('detects a greeting already sent this year', () => {
       const birthday = { lastGreetedYear: 2025 } as any;
-      expect(service.alreadyGreeted(birthday, new Date(2025, 2, 5))).toBe(true);
-      expect(service.alreadyGreeted(birthday, new Date(2026, 2, 5))).toBe(
-        false,
-      );
+      expect(
+        service.alreadyGreeted(birthday, { year: 2025, month: 3, day: 5 }),
+      ).toBe(true);
+      expect(
+        service.alreadyGreeted(birthday, { year: 2026, month: 3, day: 5 }),
+      ).toBe(false);
+    });
+  });
+
+  describe('today', () => {
+    // The bug this guards: a UTC container is already on the next day while the
+    // team it greets is still on the previous one.
+    const lateEvening = new Date('2026-09-05T02:56:00.000Z');
+
+    it('uses the configured timezone, not the server clock', () => {
+      expect(service.today(lateEvening)).toEqual({
+        year: 2026,
+        month: 9,
+        day: 4,
+      });
+    });
+
+    it('follows a timezone change', () => {
+      mockConfigService.birthdayTimezone = 'UTC';
+
+      expect(service.today(lateEvening)).toEqual({
+        year: 2026,
+        month: 9,
+        day: 5,
+      });
+
+      mockConfigService.birthdayTimezone = 'America/Mexico_City';
     });
   });
 

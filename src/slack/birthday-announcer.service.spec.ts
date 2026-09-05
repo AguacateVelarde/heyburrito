@@ -10,10 +10,13 @@ import { BirthdaysService } from '../birthdays/birthdays.service';
 import { I18nService } from '../i18n/i18n.service';
 import { ConfigService } from '../config/config.service';
 
+const TODAY = { year: 2025, month: 3, day: 5 };
+
 const mockBirthdaysService = {
   findCelebrantsOn: jest.fn(),
   markGreeted: jest.fn(),
   alreadyGreeted: jest.fn().mockReturnValue(false),
+  today: jest.fn(() => TODAY),
 };
 
 const mockSlackService = {
@@ -70,6 +73,8 @@ describe('BirthdayAnnouncerService', () => {
     mockConfigService.areBirthdaysEnabled = true;
     mockConfigService.birthdayChannel = 'C_GENERAL';
     mockConfigService.birthdayCron = '0 9 * * *';
+    mockConfigService.birthdayTimezone = 'UTC';
+    mockBirthdaysService.today.mockReturnValue(TODAY);
   });
 
   describe('onModuleInit', () => {
@@ -123,6 +128,7 @@ describe('BirthdayAnnouncerService', () => {
         scheduled: true,
         nextRun: nextRun.toISOString(),
         problem: null,
+        today: '2025-03-05',
       });
     });
 
@@ -152,6 +158,18 @@ describe('BirthdayAnnouncerService', () => {
       });
     });
 
+    it('explains an invalid timezone rather than blaming the cron', () => {
+      mockConfigService.birthdayTimezone = 'Not/AZone';
+
+      service.onModuleInit();
+
+      expect(service.getStatus()).toMatchObject({
+        scheduled: false,
+        problem: 'invalid-timezone',
+      });
+      expect(mockSchedulerRegistry.addCronJob).not.toHaveBeenCalled();
+    });
+
     it('explains an invalid cron expression', () => {
       mockConfigService.birthdayCron = 'not-a-cron';
 
@@ -170,6 +188,7 @@ describe('BirthdayAnnouncerService', () => {
 
       const result = await service.announce();
 
+      expect(mockBirthdaysService.findCelebrantsOn).toHaveBeenCalledWith(TODAY);
       expect(mockSlackService.postMessage).not.toHaveBeenCalled();
       expect(result).toEqual({ announced: [], skipped: [], channels: [] });
     });
@@ -180,7 +199,7 @@ describe('BirthdayAnnouncerService', () => {
       ]);
 
       const result = await service.announce({
-        reference: new Date(2025, 2, 5),
+        today: { year: 2025, month: 3, day: 5 },
       });
 
       expect(mockI18nService.translate).toHaveBeenCalledWith(
@@ -196,7 +215,7 @@ describe('BirthdayAnnouncerService', () => {
       );
       expect(mockBirthdaysService.markGreeted).toHaveBeenCalledWith(
         'U1',
-        new Date(2025, 2, 5),
+        TODAY,
       );
       expect(result.announced).toHaveLength(1);
     });
@@ -206,7 +225,7 @@ describe('BirthdayAnnouncerService', () => {
         { slackId: 'U1', day: 5, month: 3, year: 1990 },
       ]);
 
-      await service.announce({ reference: new Date(2025, 2, 5) });
+      await service.announce({ today: { year: 2025, month: 3, day: 5 } });
 
       expect(mockI18nService.translate).toHaveBeenCalledWith(
         'birthday.greeting.singleWithAge',
@@ -220,7 +239,7 @@ describe('BirthdayAnnouncerService', () => {
         { slackId: 'U2', day: 5, month: 3 },
       ]);
 
-      await service.announce({ reference: new Date(2025, 2, 5) });
+      await service.announce({ today: { year: 2025, month: 3, day: 5 } });
 
       expect(mockSlackService.postMessage).toHaveBeenCalledTimes(1);
       expect(mockI18nService.translate).toHaveBeenCalledWith(
@@ -236,7 +255,7 @@ describe('BirthdayAnnouncerService', () => {
       ]);
 
       const result = await service.announce({
-        reference: new Date(2025, 2, 5),
+        today: { year: 2025, month: 3, day: 5 },
       });
 
       expect(mockSlackService.postMessage).toHaveBeenCalledTimes(2);
@@ -250,7 +269,7 @@ describe('BirthdayAnnouncerService', () => {
       mockBirthdaysService.alreadyGreeted.mockReturnValue(true);
 
       const result = await service.announce({
-        reference: new Date(2025, 2, 5),
+        today: { year: 2025, month: 3, day: 5 },
       });
 
       expect(mockSlackService.postMessage).not.toHaveBeenCalled();
@@ -264,7 +283,7 @@ describe('BirthdayAnnouncerService', () => {
       mockBirthdaysService.alreadyGreeted.mockReturnValue(true);
 
       const result = await service.announce({
-        reference: new Date(2025, 2, 5),
+        today: { year: 2025, month: 3, day: 5 },
         force: true,
       });
 
@@ -278,7 +297,7 @@ describe('BirthdayAnnouncerService', () => {
       ]);
 
       await service.announce({
-        reference: new Date(2025, 2, 5),
+        today: { year: 2025, month: 3, day: 5 },
         channel: 'C_OVERRIDE',
       });
 
@@ -294,7 +313,7 @@ describe('BirthdayAnnouncerService', () => {
       ]);
 
       await expect(
-        service.announce({ reference: new Date(2025, 2, 5) }),
+        service.announce({ today: { year: 2025, month: 3, day: 5 } }),
       ).rejects.toThrow(UnprocessableEntityException);
     });
   });

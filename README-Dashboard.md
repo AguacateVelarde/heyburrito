@@ -28,7 +28,9 @@ Está construida alrededor de una pregunta: **¿se va a enviar el saludo o no?**
 1. **Banner de estado.** Verde cuando el saludo diario está activo, indicando
    canal, hora y próxima ejecución. Rojo cuando no lo está, diciendo exactamente
    qué falta (normalmente `BIRTHDAY_CHANNEL`). Sin esto, un canal mal configurado
-   se traduce en silencio absoluto y nadie sabe por qué.
+   se traduce en silencio absoluto y nadie sabe por qué. Siempre indica además
+   qué día considera «hoy» el bot y en qué zona horaria, porque no tiene por qué
+   coincidir con el reloj de quien mira el panel.
 2. **Cumplen hoy.** Panel con quién cumple hoy y si ya recibió su saludo, más un
    botón «Saludar ahora».
 3. **Formulario.** Selects de día y mes (el día se ajusta al mes y a los años
